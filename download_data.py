@@ -1,0 +1,172 @@
+"""
+Dataset Download Script — Downloads the three datasets to their respective folders.
+"""
+import os
+import sys
+import zipfile
+import requests
+from pathlib import Path
+
+
+DATASETS = {
+    "dartmouth": {
+        "description": "CRAWDAD Dartmouth Campus WiFi Trace (2018)",
+        "doi": "10.15783/C7F59T",
+        "dir": "data/dartmouth",
+        "note": (
+            "The full Dartmouth CRAWDAD dataset requires registration at "
+            "https://crawdad.org/dartmouth/campus/20090909/movement\n"
+            "Due to access restrictions, we generate synthetic data with "
+            "Dartmouth statistical properties for reproducibility."
+        ),
+        "urls": [],  # Requires manual download / registration
+    },
+    "lcr_hdd": {
+        "description": "LCR HDD 5G High Density Demand Dataset",
+        "doi": "10.1038/s41597-025-06282-0",
+        "dir": "data/lcr_hdd",
+        "note": (
+            "Available at https://opendata.ljmu.ac.uk/id/eprint/236/\n"
+            "Due to institutional access requirements, synthetic data "
+            "is generated with matching statistical properties."
+        ),
+        "urls": [],
+    },
+    "waca": {
+        "description": "WACA WiFi All-Channel Analyzer — Camp Nou",
+        "doi": "10.5281/zenodo.3960029",
+        "dir": "data/waca",
+        "urls": [
+            "https://zenodo.org/api/records/3960029",
+        ],
+    },
+}
+
+
+def download_file(url: str, dest_path: str, desc: str = "") -> bool:
+    """Download file with progress indicator."""
+    try:
+        print(f"  Downloading {desc or url}...")
+        response = requests.get(url, stream=True, timeout=60)
+        response.raise_for_status()
+
+        total = int(response.headers.get("content-length", 0))
+        with open(dest_path, "wb") as f:
+            downloaded = 0
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+                downloaded += len(chunk)
+                if total > 0:
+                    pct = downloaded / total * 100
+                    print(f"\r  Progress: {pct:.1f}%", end="", flush=True)
+            print()
+
+        print(f"  Saved to {dest_path}")
+        return True
+    except Exception as e:
+        print(f"  Download failed: {e}")
+        return False
+
+
+def download_waca() -> None:
+    """Attempt to download WACA Camp Nou data from Zenodo."""
+    dest_dir = DATASETS["waca"]["dir"]
+    os.makedirs(dest_dir, exist_ok=True)
+
+    # Try Zenodo API to get file links
+    api_url = "https://zenodo.org/api/records/3960029"
+    try:
+        print("  Querying Zenodo API for WACA Camp Nou files...")
+        resp = requests.get(api_url, timeout=30)
+        resp.raise_for_status()
+        record = resp.json()
+
+        files = record.get("files", [])
+        if not files:
+            print("  No files found in Zenodo record.")
+            return
+
+        # Download first few CSV files (or zip)
+        for f_info in files[:5]:
+            fname = f_info.get("key", "unknown")
+            furl = f_info.get("links", {}).get("self", "")
+            if furl and (fname.endswith(".csv") or fname.endswith(".zip")):
+                dest_path = os.path.join(dest_dir, fname)
+                if not os.path.exists(dest_path):
+                    success = download_file(furl, dest_path, fname)
+                    if success and fname.endswith(".zip"):
+                        try:
+                            with zipfile.ZipFile(dest_path, "r") as z:
+                                z.extractall(dest_dir)
+                            print(f"  Extracted {fname}")
+                        except Exception as e:
+                            print(f"  Could not extract: {e}")
+                else:
+                    print(f"  {fname} already exists, skipping.")
+    except Exception as e:
+        print(f"  Could not access Zenodo: {e}")
+
+
+def create_dataset_readme(data_dir: str) -> None:
+    """Create README in data directory explaining dataset sources."""
+    readme = """# Datasets for STAG-FedSAC
+
+## Dataset 1: Dartmouth'18 Campus WiFi Trace
+- **DOI**: 10.15783/C7F59T
+- **Source**: CRAWDAD (https://crawdad.org)
+- **Use**: ST-GCAT predictor training (7-year AP load time series)
+- **Access**: Requires CRAWDAD registration; synthetic data generated for reproducibility
+
+## Dataset 2: LCR HDD 5G High Density Demand
+- **DOI**: 10.1038/s41597-025-06282-0
+- **Source**: Scientific Data / LJMU Open Data (https://opendata.ljmu.ac.uk/id/eprint/236/)
+- **Use**: DRL training & QoS evaluation (user positions, traffic types, SINR)
+- **Access**: Open access; synthetic fallback included
+
+## Dataset 3: WACA WiFi All-Channel Analyzer — Camp Nou
+- **DOI**: 10.5281/zenodo.3960029
+- **Source**: Zenodo (https://zenodo.org/records/3960029)
+- **Use**: Channel interference calibration (all-channel RSSI measurements)
+- **Access**: Open access
+
+## Synthetic Data
+When real datasets are unavailable, statistically matched synthetic data is
+automatically generated by the data loaders, preserving the key properties
+described in the algorithm design document.
+"""
+    with open(os.path.join(data_dir, "README.md"), "w") as f:
+        f.write(readme)
+
+
+def main():
+    print("=" * 60)
+    print("STAG-FedSAC Dataset Setup")
+    print("=" * 60)
+
+    # Ensure directories exist
+    for name, info in DATASETS.items():
+        os.makedirs(info["dir"], exist_ok=True)
+        print(f"\n{'─' * 40}")
+        print(f"Dataset: {info['description']}")
+        print(f"DOI: {info['doi']}")
+        print(f"Directory: {info['dir']}")
+        if info.get("note"):
+            print(f"Note: {info['note']}")
+
+    # Download WACA (the only fully open-access dataset on Zenodo)
+    print(f"\n{'─' * 40}")
+    print("Attempting WACA download from Zenodo...")
+    download_waca()
+
+    # Create data directory README
+    create_dataset_readme("data")
+
+    print(f"\n{'─' * 40}")
+    print("Dataset setup complete.")
+    print("Synthetic data will be generated automatically by data loaders")
+    print("when real data files are not available in the respective directories.")
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    main()
