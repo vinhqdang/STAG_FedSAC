@@ -508,10 +508,11 @@ class JointTrainer:
                 actions = {}
                 for i in range(self.n_aps):
                     s_i = self._build_state(obs, Z_fused, i)
-                    action, _, _, _ = self.actors[i](
-                        s_i.unsqueeze(0), deterministic=True
-                    )
-                    actions[i] = action.squeeze(0).cpu().numpy()
+                    with torch.no_grad():
+                        action, _, _, _ = self.actors[i](
+                            s_i.unsqueeze(0), deterministic=True
+                        )
+                    actions[i] = action.squeeze(0).detach().cpu().numpy()
 
                 next_obs, rewards, done, info = self.env.step(actions)
 
