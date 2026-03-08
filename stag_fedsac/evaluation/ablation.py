@@ -114,7 +114,7 @@ def run_ablation_study(
             use_joint_training=config["use_joint_training"],
             use_schedule=config["use_schedule"],
             use_hierarchical_fed=config["use_hierarchical_fed"],
-            use_embedding=config.get("use_graph_embedding", True),  # A3 ablation
+            use_embedding=config["use_embedding"],              # A3 ablation
         )
 
         history = trainer.train(

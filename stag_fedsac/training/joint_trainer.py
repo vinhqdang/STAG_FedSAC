@@ -177,9 +177,10 @@ class JointTrainer:
         return torch.cat([h_i, z_i, qos_i, sched_i])
 
     def _get_history_tensor(self, obs: dict) -> torch.Tensor:
-        """Build historical observation tensor H from buffer.
+        """Build historical observation tensor H — MUTATES history buffer.
 
-        Returns: [1, N, T, F] tensor
+        Call once per env step (after env.step) to advance the buffer.
+        Returns: [1, N, T, F] tensor.
         """
         h = obs["h"]  # [N, F]
 
@@ -190,11 +191,28 @@ class JointTrainer:
         if len(self.history_buffer["history"]) > T_HISTORY:
             self.history_buffer["history"].pop(0)
 
-        # Pad if not enough history
-        history = list(self.history_buffer["history"])
+        return self._build_history_tensor_from_buffer()
+
+    def _read_history_tensor(self) -> torch.Tensor:
+        """Read current history buffer WITHOUT mutating it.
+
+        Use this in backward-pass methods (e.g. _joint_gradient_step) to avoid
+        inserting duplicate frames into the temporal window.
+        Returns: [1, N, T, F] tensor.
+        """
+        return self._build_history_tensor_from_buffer()
+
+    def _build_history_tensor_from_buffer(self) -> torch.Tensor:
+        """Shared helper: pad buffer and convert to tensor."""
+        history = list(self.history_buffer.get("history", []))
+        if not history:
+            # Edge case: no history yet — return zeros
+            dummy = np.zeros((self.n_aps, T_HISTORY, 1), dtype=np.float32)
+            return torch.zeros(
+                1, self.n_aps, T_HISTORY, 1, dtype=torch.float32, device=self.device
+            )
         while len(history) < T_HISTORY:
             history.insert(0, history[0])
-
         H = np.stack(history, axis=1)  # [N, T, F]
         return torch.tensor(H, dtype=torch.float32, device=self.device).unsqueeze(0)
 
@@ -457,8 +475,10 @@ class JointTrainer:
         """
         alpha = torch.exp(self.log_alpha).detach()
 
-        # Get fresh prediction with gradient
-        H = self._get_history_tensor(obs)
+        # Get fresh prediction with gradient.
+        # Use _read_history_tensor (non-mutating) so backward pass does NOT
+        # append a duplicate frame to the temporal history buffer.
+        H = self._read_history_tensor()
         S = self._get_schedule_tensor(obs) if self.use_schedule else \
             torch.zeros(1, self.n_aps, DELTA_HORIZON, D_SCHEDULE, device=self.device)
         Z_fused_fresh, L_hat_fresh = self.stgcat(H, S, A)
