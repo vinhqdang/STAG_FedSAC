@@ -22,24 +22,35 @@ ABLATION_CONFIGS = {
         "use_joint_training": True,
         "use_schedule": True,
         "use_hierarchical_fed": True,
+        "use_embedding": True,
     },
     "no_joint": {
         "description": "A1: η=0 (no joint gradient) — validates Contribution 3",
         "use_joint_training": False,
         "use_schedule": True,
         "use_hierarchical_fed": True,
+        "use_embedding": True,
     },
     "no_schedule": {
         "description": "A2: No schedule input S — validates Contribution 1",
         "use_joint_training": True,
         "use_schedule": False,
         "use_hierarchical_fed": True,
+        "use_embedding": True,
+    },
+    "no_embedding": {
+        "description": "A3: No embedding state S_e — validates Contribution 2",
+        "use_joint_training": True,
+        "use_schedule": True,
+        "use_hierarchical_fed": True,
+        "use_embedding": False,
     },
     "no_hier_fed": {
         "description": "A4: Single-level FL — validates Contribution 4",
         "use_joint_training": True,
         "use_schedule": True,
         "use_hierarchical_fed": False,
+        "use_embedding": True,
     },
 }
 
@@ -80,7 +91,7 @@ def run_ablation_study(
 
     for name, baseline in baselines.items():
         print(f"\nEvaluating {name}...")
-        result = evaluate_baseline(env, env, eval_episodes, name)
+        result = evaluate_baseline(baseline, env, eval_episodes, name)
         all_results[name] = result
         print(f"  {name}: {result}")
 
