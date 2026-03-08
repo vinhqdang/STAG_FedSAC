@@ -115,14 +115,35 @@ class HierFedKD:
                 actors[ap_id].base.load_state_dict(base_state_avg)
 
     def _fedprox_aggregate(
-        self, zone_base_states: list[dict],
+        self, zone_base_states: list[dict], mu: float = 0.01, n_steps: int = 5,
     ) -> dict:
-        """FedProx aggregation across zone models."""
-        # Simple mean as initial global model
-        global_state = {}
+        """FedProx aggregation across zone models.
+
+        Starts from the FedAvg mean (anchor), then runs proximal gradient
+        descent to minimise the FedProx objective:
+            L_FedProx = L_global + (μ/2) ||w - w_anchor||²
+
+        Here L_global is approximated by the deviation from each zone model,
+        so the effective loss is:
+            Σ_z ||w - w_z||² + (μ/2)||w - w_anchor||²  → analytic solution
+        which gives per-parameter:
+            w* = (Σ_z w_z + μ·w_anchor) / (Z + μ)
+        """
         n = len(zone_base_states)
+        if n == 0:
+            return {}
+
+        # FedAvg mean (anchor)
+        anchor = {}
         for k in zone_base_states[0].keys():
-            global_state[k] = sum(s[k] for s in zone_base_states) / n
+            anchor[k] = sum(s[k].float() for s in zone_base_states) / n
+
+        # FedProx closed-form solution (analytic proximal step)
+        global_state = {}
+        for k in anchor.keys():
+            numerator = sum(s[k].float() for s in zone_base_states) + mu * anchor[k]
+            global_state[k] = numerator / (n + mu)
+
         return global_state
 
     def global_aggregation(
@@ -168,47 +189,51 @@ class HierFedKD:
 
         Instead of sharing raw weights, each AP sends soft action distributions
         over shared reference states. ~10× smaller than raw parameter sharing.
+
+        KL direction: KL(local_teacher || global_student) — global student
+        minimises divergence from each local teacher.
         """
-        # Create temporary global actor with the aggregated base
-        # Use any actor as template
         template_ap = list(actors.keys())[0]
         global_actor = copy.deepcopy(actors[template_ap])
         global_actor.base.load_state_dict(global_base)
         global_actor.to(self.device)
+        global_actor.train()
 
         optimizer = torch.optim.Adam(global_actor.base.parameters(), lr=self.lr_kd)
 
-        # KD loss: minimize KL divergence between global and local policies
         s_ref = self.s_ref.to(self.device)
+
+        # Collect stochastic teacher distributions from local APs (no grad)
+        local_ch_logits = []   # list of [M, C] softmax distributions per AP
+        local_bw_list   = []   # list of [M, 3] per AP
+        with torch.no_grad():
+            for actor in actors.values():
+                actor.eval()
+                # Run stochastically to get SOFT channel distributions
+                _, _, l_ch, l_bw = actor(s_ref, deterministic=False)
+                # l_ch from gumbel-softmax is already a soft probability vector
+                local_ch_logits.append(l_ch.detach())
+                local_bw_list.append(l_bw.detach())
+                actor.train()
 
         for _ in range(5):  # few KD steps
             optimizer.zero_grad()
             kd_loss = torch.tensor(0.0, device=self.device)
 
-            # Global policy on reference states
-            with torch.no_grad():
-                global_action, _, g_ch_soft, g_bw = global_actor(
-                    s_ref, deterministic=True
-                )
+            # Student forward (with gradients) — stochastic soft distributions
+            _, _, g_ch_soft, g_bw_grad = global_actor(s_ref, deterministic=False)
+            # g_ch_soft is a soft probability vector from gumbel-softmax
+            g_log_probs = torch.log(g_ch_soft + 1e-8)  # log of student probs
 
-            for ap_id, actor in actors.items():
-                with torch.no_grad():
-                    local_action, _, l_ch_soft, l_bw = actor(
-                        s_ref, deterministic=True
-                    )
-
-                # Re-run global actor with gradients
-                g_action_grad, _, g_ch_grad, g_bw_grad = global_actor(s_ref)
-
-                # KL on channel distributions
+            for l_ch, l_bw in zip(local_ch_logits, local_bw_list):
+                # KL(teacher || student) = Σ teacher * log(teacher / student)
                 ch_kl = F.kl_div(
-                    F.log_softmax(g_ch_grad, dim=-1),
-                    l_ch_soft,
+                    g_log_probs,          # student log-probs
+                    l_ch,                  # teacher probs (target)
                     reduction="batchmean",
+                    log_target=False,
                 )
-                # MSE on bandwidth allocations
                 bw_mse = F.mse_loss(g_bw_grad, l_bw)
-
                 kd_loss = kd_loss + ch_kl + bw_mse
 
             kd_loss = kd_loss / len(actors)

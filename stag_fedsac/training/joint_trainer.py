@@ -266,6 +266,19 @@ class JointTrainer:
                 next_obs, rewards, done, info = self.env.step(actions)
 
                 # ── [6] COMPUTE REWARD (with prediction bonus) ──
+                # Build next observation tensors ONCE per env step (not per AP)
+                next_A = self.env.get_adjacency_tensor().to(self.device)
+                next_H = self._get_history_tensor(next_obs)   # appends once to history buffer
+                next_S = (
+                    self._get_schedule_tensor(next_obs)
+                    if self.use_schedule
+                    else torch.zeros(
+                        1, self.n_aps, DELTA_HORIZON, D_SCHEDULE, device=self.device
+                    )
+                )
+                with torch.no_grad():
+                    next_Z_fused, _ = self.stgcat(next_H, next_S, next_A)
+
                 for i in range(self.n_aps):
                     # Prediction bonus: -|L_hat - L_true|
                     pred_bonus = -abs(
@@ -280,14 +293,6 @@ class JointTrainer:
                     episode_rewards[i] += total_reward
 
                     # ── [7] STORE TRANSITION ──
-                    next_A = self.env.get_adjacency_tensor().to(self.device)
-                    next_H = self._get_history_tensor(next_obs)
-                    next_S = self._get_schedule_tensor(next_obs) if self.use_schedule else \
-                        torch.zeros(1, self.n_aps, DELTA_HORIZON, D_SCHEDULE, device=self.device)
-
-                    with torch.no_grad():
-                        next_Z_fused, _ = self.stgcat(next_H, next_S, next_A)
-
                     next_s_i = self._build_state(next_obs, next_Z_fused, i)
 
                     self.replay_buffers[i].store(
@@ -443,11 +448,15 @@ class JointTrainer:
             torch.zeros(1, self.n_aps, DELTA_HORIZON, D_SCHEDULE, device=self.device)
         Z_fused_fresh, L_hat_fresh = self.stgcat(H, S, A)
 
-        # Standard prediction loss
+        # Standard multi-step prediction loss: average MSE over all Δ horizon steps
+        # L_hat: [1, N, Δ], L_true: [N] (current true load, broadcast across steps)
         L_true = torch.tensor(
             obs["true_loads"], dtype=torch.float32, device=self.device
-        )
-        pred_loss = F.mse_loss(L_hat_fresh[0, :, 0], L_true)
+        )  # [N]
+        # Broadcast L_true to all forecast steps as target (steady-state forecast)
+        L_hat_steps = L_hat_fresh[0, :, :]   # [N, Δ]
+        L_true_exp  = L_true.unsqueeze(-1).expand_as(L_hat_steps)  # [N, Δ]
+        pred_loss = F.mse_loss(L_hat_steps, L_true_exp)  # avg over N and Δ
 
         # Policy-informed gradient: run actors with fresh embeddings
         actor_loss_total = torch.tensor(0.0, device=self.device)

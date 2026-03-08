@@ -67,14 +67,15 @@ class SACActorNetwork(nn.Module):
             p_dist = Normal(p_mean, p_std)
             p_raw = p_dist.rsample()
 
-        # Squash to [P_min, P_max]
-        p = torch.sigmoid(p_raw) * (self.p_max - self.p_min) + self.p_min
-        # Log-prob with squashing correction
+        # Squash to [P_min, P_max]  via sigmoid
+        p_sig = torch.sigmoid(p_raw)
+        p = p_sig * (self.p_max - self.p_min) + self.p_min
+        # Log-prob with correct sigmoid Jacobian: d/dx sigmoid(x) = sigmoid(x)*(1-sigmoid(x))
         if deterministic:
             log_prob_p = torch.zeros_like(p)
         else:
             log_prob_p = p_dist.log_prob(p_raw) - torch.log(
-                1 - torch.sigmoid(p_raw).pow(2) + EPSILON
+                p_sig * (1.0 - p_sig) + EPSILON
             )
             log_prob_p = log_prob_p.sum(dim=-1, keepdim=True)
 
@@ -196,16 +197,20 @@ class PersonalizedSACActor(nn.Module):
 
         if deterministic:
             p_raw = p_mean
-            log_prob_p = torch.zeros_like(p_mean)
         else:
             p_dist = Normal(p_mean, p_std)
             p_raw = p_dist.rsample()
+
+        p_sig = torch.sigmoid(p_raw)
+        p = p_sig * (self.p_max - self.p_min) + self.p_min
+
+        if deterministic:
+            log_prob_p = torch.zeros_like(p_mean)
+        else:
             log_prob_p = p_dist.log_prob(p_raw) - torch.log(
-                1 - torch.sigmoid(p_raw).pow(2) + EPSILON
+                p_sig * (1.0 - p_sig) + EPSILON
             )
             log_prob_p = log_prob_p.sum(dim=-1, keepdim=True)
-
-        p = torch.sigmoid(p_raw) * (self.p_max - self.p_min) + self.p_min
 
         # Channel
         ch_logits = self.channel_logits(h)

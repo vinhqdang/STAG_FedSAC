@@ -210,15 +210,32 @@ class WiFiEnvironment:
     def _compute_throughput(
         self, sinr: np.ndarray, bw_alloc: np.ndarray, n_users_class: np.ndarray
     ) -> float:
-        """Shannon-based throughput estimation with BW allocation."""
+        """Shannon-based throughput with per-QoS-class bandwidth allocation.
+
+        Each QoS class receives a fraction of the 20 MHz channel proportional
+        to bw_alloc[c]. Users in class c share bw_alloc[c] * 20 MHz equally.
+        """
         if len(sinr) == 0:
             return 0.0
-        # Shannon: C = B * log2(1 + SINR_linear)
+        total_bw_mhz = 20.0
+        # Normalise allocation (guard against zero-sum)
+        bw_alloc = np.asarray(bw_alloc, dtype=float)
+        bw_alloc = np.maximum(bw_alloc, 1e-6)
+        bw_alloc = bw_alloc / bw_alloc.sum()
+
         sinr_linear = 10 ** (sinr / 10)
-        bw_mhz = 20.0  # channel bandwidth
-        per_user_bw = bw_mhz / max(len(sinr), 1)
-        throughput = per_user_bw * np.log2(1 + sinr_linear)
-        return float(throughput.sum())
+        throughput = 0.0
+        for c in range(3):
+            class_mask = n_users_class == c
+            if not class_mask.any():
+                continue
+            n_c = class_mask.sum()
+            bw_c = bw_alloc[c] * total_bw_mhz  # MHz allocated to class c
+            per_user_bw_c = bw_c / n_c          # MHz per user in class c
+            throughput += float(
+                (per_user_bw_c * np.log2(1 + sinr_linear[class_mask])).sum()
+            )
+        return throughput
 
     def reset(self) -> dict[str, Any]:
         """Reset environment for a new episode."""
@@ -255,8 +272,7 @@ class WiFiEnvironment:
             if n_users > 0:
                 sinr = self._compute_sinr(i, self.ap_powers[i], self.ap_channels[i])
                 user_classes = self.user_qos_class[users]
-                n_class = np.bincount(user_classes, minlength=3)
-                tp = self._compute_throughput(sinr, self.ap_bw_alloc[i], n_class)
+                tp = self._compute_throughput(sinr, self.ap_bw_alloc[i], user_classes)
                 self.ap_throughputs[i] = tp
                 self.ap_latencies[i] = max(5.0, 100.0 / (tp / n_users + 0.1))
                 self.ap_channel_utils[i] = min(1.0, n_users / 30)
@@ -389,8 +405,9 @@ class WiFiEnvironment:
                 qos_violations += 1
         r_qos = -qos_violations / max(n_users, 1)
 
-        # Capacity constraint (Lagrangian handled externally)
-        r_cap = -max(0, self.ap_loads[ap_id] - 0.9)
+        # NOTE: capacity constraint is handled by the adaptive Lagrangian
+        # multiplier in JointTrainer.  No r_cap term here to avoid
+        # double-counting (design spec section 6.2, constraint C2).
 
         # Combined reward
         reward = (
@@ -398,7 +415,6 @@ class WiFiEnvironment:
             + 0.25 * r_lat
             + 0.20 * jain
             + 0.05 * r_qos
-            + r_cap
         )
 
         return float(reward), {
