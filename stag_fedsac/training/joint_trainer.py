@@ -39,6 +39,7 @@ class JointTrainer:
         use_joint_training: bool = True,
         use_schedule: bool = True,
         use_hierarchical_fed: bool = True,
+        use_embedding: bool = True,   # A3 ablation: False → zero Z_fused
     ):
         self.n_aps = n_aps
         self.n_channels = n_channels
@@ -46,6 +47,7 @@ class JointTrainer:
         self.use_joint_training = use_joint_training
         self.use_schedule = use_schedule
         self.use_hierarchical_fed = use_hierarchical_fed
+        self.use_embedding = use_embedding          # A3 ablation flag
 
         # Zone assignments
         self.zone_assignments = {i: i % N_ZONES for i in range(n_aps)}
@@ -158,13 +160,20 @@ class JointTrainer:
         z_fused: torch.Tensor,
         ap_id: int,
     ) -> torch.Tensor:
-        """Construct SAC state: concat[h_i, Z_fused_i.flatten(), qos_i, sched_i]."""
-        h_i = torch.tensor(obs["h"][ap_id], dtype=torch.float32, device=self.device)
-        z_i = z_fused[0, ap_id].flatten()  # [delta * d_h]
-        qos_i = torch.tensor(obs["qos"][ap_id], dtype=torch.float32, device=self.device)
-        sched_i = torch.tensor(
-            obs["schedule"][ap_id], dtype=torch.float32, device=self.device
-        )
+        """Construct SAC state: concat[h_i, Z_fused_i.flatten(), qos_i, sched_i].
+
+        When use_embedding=False (A3 ablation), Z_fused is replaced by zeros
+        so the agent cannot use graph embedding information.
+        """
+        h_i   = torch.tensor(obs["h"][ap_id], dtype=torch.float32, device=self.device)
+        if self.use_embedding:
+            z_i = z_fused[0, ap_id].flatten()          # [delta * d_h]
+        else:
+            z_i = torch.zeros(
+                z_fused[0, ap_id].flatten().shape[0], device=self.device
+            )
+        qos_i  = torch.tensor(obs["qos"][ap_id],      dtype=torch.float32, device=self.device)
+        sched_i = torch.tensor(obs["schedule"][ap_id], dtype=torch.float32, device=self.device)
         return torch.cat([h_i, z_i, qos_i, sched_i])
 
     def _get_history_tensor(self, obs: dict) -> torch.Tensor:
@@ -311,7 +320,7 @@ class JointTrainer:
                     self.global_step >= WARMUP_STEPS
                     and self.global_step % UPDATE_FREQ == 0
                 ):
-                    self._update_step(obs, A)
+                    self._update_step(obs, A, next_obs)
 
                 # ── [13] LAGRANGIAN UPDATE ──
                 loads_tensor = torch.tensor(
@@ -373,7 +382,7 @@ class JointTrainer:
         self.writer.close()
         return dict(training_history)
 
-    def _update_step(self, obs: dict, A: torch.Tensor) -> None:
+    def _update_step(self, obs: dict, A: torch.Tensor, next_obs: dict | None = None) -> None:
         """Execute backward pass — Algorithm steps 8–14."""
         alpha = torch.exp(self.log_alpha).detach()
 
@@ -433,12 +442,18 @@ class JointTrainer:
 
         # ── [12] JOINT GRADIENT (CORE NOVELTY) ──
         if self.use_joint_training:
-            self._joint_gradient_step(obs, A)
+            self._joint_gradient_step(obs, A, next_obs=next_obs)
 
-    def _joint_gradient_step(self, obs: dict, A: torch.Tensor) -> None:
+    def _joint_gradient_step(
+        self, obs: dict, A: torch.Tensor, next_obs: dict | None = None
+    ) -> None:
         """Step 12: Joint gradient — policy gradient flows into predictor.
 
-        L_pred = MSE(L_hat, L_true) + η · L_actor_fresh
+        L_pred = MSE(L_hat, L_true_multi_step) + η · L_actor_fresh
+
+        Multi-step targets:
+          step 0  → next_obs true_loads  (actual 1-step-ahead ground truth)
+          steps 1..Δ-1 → obs true_loads  (steady-state assumption; no future GT)
         """
         alpha = torch.exp(self.log_alpha).detach()
 
@@ -448,15 +463,26 @@ class JointTrainer:
             torch.zeros(1, self.n_aps, DELTA_HORIZON, D_SCHEDULE, device=self.device)
         Z_fused_fresh, L_hat_fresh = self.stgcat(H, S, A)
 
-        # Standard multi-step prediction loss: average MSE over all Δ horizon steps
-        # L_hat: [1, N, Δ], L_true: [N] (current true load, broadcast across steps)
-        L_true = torch.tensor(
+        # Build proper multi-step prediction targets:
+        #   step 0  = actual next-step load (from next_obs, available after env.step)
+        #   steps 1..Δ-1 = current load (steady-state fallback when GT is unavailable)
+        L_curr = torch.tensor(
             obs["true_loads"], dtype=torch.float32, device=self.device
-        )  # [N]
-        # Broadcast L_true to all forecast steps as target (steady-state forecast)
-        L_hat_steps = L_hat_fresh[0, :, :]   # [N, Δ]
-        L_true_exp  = L_true.unsqueeze(-1).expand_as(L_hat_steps)  # [N, Δ]
-        pred_loss = F.mse_loss(L_hat_steps, L_true_exp)  # avg over N and Δ
+        )  # [N] — current true load
+        delta = L_hat_fresh.shape[-1]  # Δ forecast steps
+
+        if next_obs is not None:
+            L_next = torch.tensor(
+                next_obs["true_loads"], dtype=torch.float32, device=self.device
+            )  # [N] — actual 1-step-ahead ground truth
+        else:
+            L_next = L_curr  # fallback if next_obs not provided
+
+        # Assemble [N, Δ] target: step 0 = next-step GT, rest = steady-state
+        L_hat_steps = L_hat_fresh[0, :, :]  # [N, Δ]
+        target_steps = L_curr.unsqueeze(-1).expand_as(L_hat_steps).clone()  # [N, Δ]
+        target_steps[:, 0] = L_next   # step-0 gets real next-step label
+        pred_loss = F.mse_loss(L_hat_steps, target_steps.detach())  # avg over N and Δ
 
         # Policy-informed gradient: run actors with fresh embeddings
         actor_loss_total = torch.tensor(0.0, device=self.device)

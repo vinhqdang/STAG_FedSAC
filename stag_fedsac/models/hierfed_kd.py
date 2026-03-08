@@ -54,6 +54,10 @@ class HierFedKD:
         # Reference state buffer for KD
         self.s_ref: torch.Tensor | None = None
 
+        # Previous global model — used as FedProx anchor.
+        # On first round this is None and we fall back to FedAvg.
+        self._global_model_prev: dict | None = None
+
         # Global model state dict (initialized on first aggregation)
         self.global_base_state: dict | None = None
 
@@ -115,33 +119,44 @@ class HierFedKD:
                 actors[ap_id].base.load_state_dict(base_state_avg)
 
     def _fedprox_aggregate(
-        self, zone_base_states: list[dict], mu: float = 0.01, n_steps: int = 5,
+        self,
+        zone_base_states: list[dict],
+        mu: float = 0.01,
     ) -> dict:
         """FedProx aggregation across zone models.
 
-        Starts from the FedAvg mean (anchor), then runs proximal gradient
-        descent to minimise the FedProx objective:
-            L_FedProx = L_global + (μ/2) ||w - w_anchor||²
+        Proximal objective (Li et al., 2020):
+            w* = argmin_w  Σ_z ||w - w_z||² + (μ/2)||w - w_prev||²
 
-        Here L_global is approximated by the deviation from each zone model,
-        so the effective loss is:
-            Σ_z ||w - w_z||² + (μ/2)||w - w_anchor||²  → analytic solution
-        which gives per-parameter:
-            w* = (Σ_z w_z + μ·w_anchor) / (Z + μ)
+        Analytic solution:
+            w* = (Σ_z w_z + μ·w_prev) / (Z + μ)
+
+        Anchor w_prev is the PREVIOUS global model, NOT the current mean.
+        Using anchor=current_mean would make the formula reduce to plain FedAvg
+        (since Σw_z + μ*(Σw_z/n) = Σw_z*(1+μ/n) and divides by (n+μ) ≈ n).
         """
         n = len(zone_base_states)
         if n == 0:
             return {}
 
-        # FedAvg mean (anchor)
-        anchor = {}
-        for k in zone_base_states[0].keys():
-            anchor[k] = sum(s[k].float() for s in zone_base_states) / n
+        # FedAvg mean (baseline / first-round fallback when no prev global exists)
+        fedavg_mean = {
+            k: sum(s[k].float() for s in zone_base_states) / n
+            for k in zone_base_states[0].keys()
+        }
 
-        # FedProx closed-form solution (analytic proximal step)
+        if self._global_model_prev is None:
+            # First round: no prior global model → plain FedAvg
+            return fedavg_mean
+
+        # FedProx: pull towards previous global model
         global_state = {}
-        for k in anchor.keys():
-            numerator = sum(s[k].float() for s in zone_base_states) + mu * anchor[k]
+        for k in fedavg_mean.keys():
+            if k not in self._global_model_prev:
+                global_state[k] = fedavg_mean[k]
+                continue
+            w_prev = self._global_model_prev[k].to(zone_base_states[0][k].device).float()
+            numerator = sum(s[k].float() for s in zone_base_states) + mu * w_prev
             global_state[k] = numerator / (n + mu)
 
         return global_state
@@ -168,8 +183,10 @@ class HierFedKD:
         if not zone_base_states:
             return
 
-        # FedProx aggregation
+        # FedProx aggregation (uses _global_model_prev as anchor if available)
         global_base = self._fedprox_aggregate(zone_base_states)
+        # Save current global model as anchor for the NEXT global round
+        self._global_model_prev = {k: v.clone().cpu() for k, v in global_base.items()}
         self.global_base_state = global_base
 
         # Knowledge Distillation step (if reference states available)
