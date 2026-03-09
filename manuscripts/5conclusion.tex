@@ -1,0 +1,52 @@
+% ========================================================
+% 5conclusion.tex
+% ========================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+We presented \textbf{STAG-FedSAC}, a unified framework that addresses four
+open challenges in transit-venue WiFi management: schedule-blind prediction,
+reactive control, unfair multi-class bandwidth allocation, and
+communication-inefficient multi-AP coordination. The four novel contributions
+---ST-GCAT with schedule cross-attention, graph-embedded SAC state,
+bidirectional joint training, and HierFed-KD---were each demonstrated to be
+independently necessary through a controlled ablation study. Together, they
+achieve a collective $24.5\%$ reward improvement and $9.5\%$ fairness gain
+over the strongest federated baseline on a 30-AP transit terminal simulation.
+
+Three aspects of the framework deserve particular attention for future work:
+\begin{enumerate}
+  \item \textbf{NS-3 integration}: Replacing the Python simulator with an
+  ns3-ai~\cite{ns3ai} interface would provide higher-fidelity SINR modelling,
+  capturing hidden terminal effects and frequency-selective fading absent in
+  the current Shannon approximation.
+
+  \item \textbf{Real-world deployment}: The Dartmouth'18~\cite{DartmouthWiFi}
+  and LCR HDD~\cite{LCRHDD} datasets confirm that real campus and stadium
+  traces exhibit the surge patterns modelled here. A trial deployment at a
+  high-speed rail station would validate transfer of the simulator-trained
+  policies to hardware-level AP controllers.
+
+  \item \textbf{Heterogeneous architectures}: As APs increasingly vary in
+  radio chipset capability (Wi-Fi~6 vs.\ Wi-Fi~7), architecture-agnostic
+  distillation beyond soft channel distributions---e.g., matching latent
+  spaces via contrastive alignment~\cite{KDAFRL2025}---would strengthen
+  HierFed-KD's applicability across heterogeneous venues.
+\end{enumerate}
+
+STAG-FedSAC's code and pre-trained checkpoints are publicly available at
+\url{https://github.com/vinhqdang/STAG_FedSAC}, enabling reproducibility
+and further community research on schedule-aware intelligent wireless systems.
+
+\section*{Declaration of Competing Interest}
+The authors declare no competing financial interests or personal relationships
+that could have appeared to influence the work reported in this paper.
+
+\section*{Data Availability}
+The WACA Camp Nou dataset is publicly available at \url{https://doi.org/10.5281/zenodo.3960029}.
+The Dartmouth WiFi traces are available at \url{https://doi.org/10.15783/C7F59T}.
+Synthetic schedule data and simulation code are included in the public repository.
+
+\section*{Acknowledgements}
+The author thanks the British University Vietnam for providing access to the
+NVIDIA RTX 5000 Ada GPU used for all experiments.

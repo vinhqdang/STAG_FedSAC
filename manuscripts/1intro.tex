@@ -1,0 +1,92 @@
+% ========================================================
+% 1intro.tex
+% ========================================================
+\section{Introduction}
+\label{sec:intro}
+
+Modern transit venues---international airports, high-speed railway stations,
+and intercity bus terminals---are among the most WiFi-demanding environments
+on earth. At peak hours, a single departure gate lounge can simultaneously
+host hundreds of users streaming 4K video, conducting video calls, and uploading
+content, all sharing fewer than a dozen access points (APs)~\cite{Shaabanzadeh2024}.
+Unlike enterprise offices or university campuses, transit venues exhibit a
+distinctive pattern: congestion is \emph{predictable}. Departure and arrival
+schedules define when and where crowds will concentrate to a degree of temporal
+precision rarely available in other settings. Yet commercially deployed WiFi
+controllers remain fundamentally \emph{reactive}---they detect congestion only
+after users experience degraded service and respond with heuristic load
+balancing that ignores future schedule information entirely~\cite{Du2024}.
+
+Four interrelated research gaps motivate this work:
+
+\begin{enumerate}
+  \item \textbf{Schedule unawareness}: Existing predictors treat AP load as a
+  purely historical time series, discarding transit schedule metadata that
+  could provide minutes-to-hours of lead time before a surge~\cite{Salami2024}.
+
+  \item \textbf{Reactive congestion control}: Rule-based controllers (Strongest
+  Signal First, Least Loaded First) and even DRL agents trained without
+  lookahead cannot pre-configure power and bandwidth before users arrive at
+  gate zones~\cite{Zhang2024}.
+
+  \item \textbf{Unfair bandwidth distribution}: Multi-class
+  QoS---VoIP requires low latency, streaming requires high throughput, best-effort
+  tolerates delays---demands a hybrid action space that simultaneously controls
+  power, channel, and class-level bandwidth allocation, which simple DDPG
+  continuous actions cannot represent efficiently~\cite{Szott2024}.
+
+  \item \textbf{Poor multi-AP coordination}: Centralised optimisation violates
+  user privacy; isolated per-AP agents ignore spatial interference. Federated
+  learning is promising, but single-level FedAvg loses zone-level
+  heterogeneity~\cite{Du2024}.
+\end{enumerate}
+
+We address all four gaps simultaneously with \textbf{STAG-FedSAC}: a unified
+framework that couples a Schedule-Conditioned Spatio-Temporal Graph Attention
+Transformer (ST-GCAT) predictor with a per-AP Soft Actor-Critic (SAC) agent
+trained through a bidirectional joint gradient mechanism, coordinated by a
+two-level Hierarchical Federated Aggregation with Knowledge Distillation
+(HierFed-KD). Figure~\ref{fig:architecture} illustrates the system overview.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth]{fig7_architecture.png}
+  \caption{STAG-FedSAC system overview. Module 1 (ST-GCAT) predicts future
+  AP loads using historical observations, the interference graph, and transit
+  schedule features. Its graph embeddings $\mathbf{Z}_\mathrm{fused}$ enrich
+  the SAC state (Module 2). Module 3 (HierFed-KD) coordinates the distributed
+  agents without sharing raw data. The bidirectional gradient bridge
+  ($\eta \cdot \mathcal{L}_\mathrm{actor} \to \phi$) is the core novelty.}
+  \label{fig:architecture}
+\end{figure}
+
+The \textbf{novel contributions} of this paper are:
+
+\begin{itemize}
+  \item \textbf{ST-GCAT (Contribution 1)}: The first graph cross-attention
+  Transformer where transit schedule tensors $\mathbf{S}^{(t:t+\Delta)}$
+  serve as cross-attention features to a spatial Graph Attention Network (GAT)
+  + temporal Transformer, enabling prediction of AP load surges up to
+  $\Delta = 6$ timesteps (30 min) ahead.
+
+  \item \textbf{Graph-embedded SAC state (Contribution 2)}: Rather than
+  appending a scalar load forecast, we concatenate the full ST-GCAT embedding
+  $\mathbf{Z}_\mathrm{fused} \in \Rset^{N \times \Delta \times d_h}$ to the SAC
+  state, preserving spatial structure for downstream policy learning.
+
+  \item \textbf{Bidirectional joint training (Contribution 3)}: The predictor
+  loss is augmented with the actor loss:
+  $\mathcal{L}_\mathrm{pred} = \mathrm{MSE}(\hat{L}, L) + \eta \mathcal{L}_\mathrm{actor}$,
+  so that policy gradients back-propagate into ST-GCAT, aligning representations
+  with control objectives.
+
+  \item \textbf{HierFed-KD (Contribution 4)}: A two-level (zone $\to$ global)
+  federation protocol using quality-weighted FedAvg at zone level,
+  FedProx at global level, and knowledge distillation for $11.5\times$
+  communication compression.
+\end{itemize}
+
+The remainder of this paper is organised as follows. Section~\ref{sec:related}
+reviews related work. Section~\ref{sec:method} details the STAG-FedSAC
+framework. Section~\ref{sec:exp} presents experimental results.
+Section~\ref{sec:conclusion} concludes.

@@ -1,0 +1,76 @@
+% ========================================================
+% main.tex — STAG-FedSAC Manuscript
+% Target: Knowledge-Based Systems (Elsevier)
+% ========================================================
+\documentclass[review,12pt]{elsarticle}
+
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{subcaption}
+\usepackage{cite}
+\usepackage{url}
+
+% ── Path for figures ────────────────────────────────────
+\graphicspath{{figures/}}
+
+% ── Notation macros ─────────────────────────────────────
+\newcommand{\bfz}{\mathbf{Z}}
+\newcommand{\bfh}{\mathbf{H}}
+\newcommand{\bfs}{\mathbf{S}}
+\newcommand{\bfa}{\mathbf{A}}
+\newcommand{\calL}{\mathcal{L}}
+\newcommand{\Rset}{\mathbb{R}}
+
+% ── Journal metadata ────────────────────────────────────
+\journal{Knowledge-Based Systems}
+
+\begin{document}
+
+\begin{frontmatter}
+
+\title{STAG-FedSAC: Schedule-Conditioned Spatio-Temporal Graph Attention with
+       Hierarchical Federated Soft Actor-Critic for Proactive WiFi Optimization
+       in Transit Venues}
+
+\author[a]{Quang-Vinh Dang\corref{cor1}}
+\ead{vinh.dq4@buv.edu.vn}
+
+\cortext[cor1]{Corresponding author}
+\affiliation[a]{organization={British University Vietnam},
+                addressline={Ecopark Township, Hung Yen},
+                city={Hanoi},
+                country={Vietnam}}
+
+\input{0abstract}
+
+\begin{keyword}
+WiFi resource management \sep
+Spatio-temporal graph attention \sep
+Soft Actor-Critic \sep
+Federated learning \sep
+Knowledge distillation \sep
+Transit venue networks \sep
+Deep reinforcement learning \sep
+Schedule-aware prediction
+\end{keyword}
+
+\end{frontmatter}
+
+\input{1intro}
+\input{2related_work}
+\input{3method}
+\input{4exp}
+\input{5conclusion}
+
+% ── References ──────────────────────────────────────────
+\bibliographystyle{elsarticle-num}
+\bibliography{references}
+
+\end{document}

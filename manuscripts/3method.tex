@@ -1,0 +1,221 @@
+% ========================================================
+% 3method.tex
+% ========================================================
+\section{Methodology}
+\label{sec:method}
+
+\subsection{Problem Formulation}
+
+Consider a transit venue with $N$ wireless APs indexed by
+$\mathcal{N} = \{1, \dots, N\}$. At each discrete timestep $t$ (5-minute
+intervals), each AP $i$ chooses a hybrid action
+$\mathbf{a}_i^t = (p_i, c_i, \mathbf{w}_i) \in \mathcal{A}$, where
+$p_i \in [P_{\min}, P_{\max}]$ is transmit power in dBm,
+$c_i \in \{1, \dots, C\}$ is the assigned channel (Gumbel-softmax
+relaxation), and $\mathbf{w}_i \in \Delta^3$ is a 3-simplex bandwidth
+allocation across QoS classes (VoIP, streaming, best-effort).
+
+The objective is to jointly maximise a multi-dimensional reward:
+\begin{equation}
+  r_i^t = \alpha r_{\mathrm{tp}} + \beta r_{\mathrm{lat}} +
+          \gamma r_{\mathrm{fair}} + \delta r_{\mathrm{qos}} +
+          \delta_p \, b_{\mathrm{pred}}
+  \label{eq:reward}
+\end{equation}
+subject to an adaptive capacity constraint $L_i^t \le 0.9$
+enforced via Lagrangian multiplier $\lambda_i^t$.
+Parameters $\alpha = 0.40$, $\beta = 0.25$, $\gamma = 0.20$,
+$\delta = 0.05$, $\delta_p = 0.10$ are tuned per the design specification.
+
+The global MDP is factorised into per-AP sub-MDPs sharing parameters
+through hierarchical federated aggregation (Section~\ref{sec:hierfed}).
+
+\subsection{Module 1: ST-GCAT Predictor}
+
+\subsubsection{Spatial GAT Layer}
+Let $\mathbf{A}^t \in \Rset^{N \times N}$ denote the interference graph at
+time $t$, where edge weight $a_{ij}$ encodes the RSSI-based interference
+between APs $i$ and $j$. The spatial GAT applies multi-head attention:
+\begin{equation}
+  \mathbf{h}_i^{\mathrm{sp}} =
+    \sigma\!\left(\sum_{j \in \mathcal{N}_i}
+      \alpha_{ij}^{\mathrm{GAT}} \mathbf{W}^{\mathrm{sp}} \mathbf{x}_j\right),
+  \quad
+  \alpha_{ij}^{\mathrm{GAT}} =
+    \frac{\exp(\mathrm{LeakyReLU}(\mathbf{a}^{\top}
+      [\mathbf{W}\mathbf{h}_i \| \mathbf{W}\mathbf{h}_j]))}
+    {\sum_{k}\exp(\mathrm{LeakyReLU}(\mathbf{a}^\top
+      [\mathbf{W}\mathbf{h}_i \| \mathbf{W}\mathbf{h}_k]))}
+  \label{eq:gat}
+\end{equation}
+
+\subsubsection{Temporal Transformer with Schedule Cross-Attention}
+The temporal Transformer processes the history sequence
+$\mathbf{H} = [\mathbf{h}^{t-T}, \dots, \mathbf{h}^t] \in \Rset^{N \times T \times F}$
+with standard multi-head self-attention. Crucially, the schedule feature
+tensor $\mathbf{S}^{t:t+\Delta} \in \Rset^{N \times \Delta \times D_s}$
+(encoding flight/train departure counts per AP zone, dwell time, and gate
+assignments) serves as the cross-attention Key and Value:
+\begin{align}
+  \mathbf{Z}_i &= \mathrm{CrossAttn}(Q = \mathbf{H}_i, K = \mathbf{S}_i,
+                                       V = \mathbf{S}_i), \label{eq:crossattn} \\
+  \hat{L}_i^{t+1:t+\Delta} &= \mathrm{PredHead}(\mathbf{Z}_i).
+  \label{eq:pred}
+\end{align}
+The fused embedding $\bfz_\mathrm{fused} = [\mathbf{Z}_1, \dots, \mathbf{Z}_N]
+\in \Rset^{N \times \Delta \times d_h}$ is stored and passed to the SAC
+agent. Prediction targets for the joint loss are the next-step true loads
+$L^{t+1}$ (step 0) and steady-state estimates for steps $1:\Delta-1$.
+
+\subsection{Module 2: Graph-SAC Agent}
+\label{sec:sac}
+
+\subsubsection{State Construction}
+The state of AP $i$ at time $t$ is:
+\begin{equation}
+  \mathbf{s}_i^t = \left[
+    \mathbf{h}_i,\;
+    \mathrm{vec}(\mathbf{Z}_{\mathrm{fused},i}),\;
+    \mathbf{q}_i,\;
+    \mathbf{s}^{\mathrm{sched}}_i
+  \right] \in \Rset^{d_s},
+  \label{eq:state}
+\end{equation}
+where $\mathbf{h}_i \in \Rset^5$ is the local feature vector,
+$\mathrm{vec}(\mathbf{Z}_{\mathrm{fused},i}) \in \Rset^{\Delta \cdot d_h}$
+(= 768 dims with $\Delta=6$, $d_h=128$) is the flattened graph embedding,
+$\mathbf{q}_i \in \Rset^3$ contains QoS tail fractions, and
+$\mathbf{s}^{\mathrm{sched}}_i \in \Rset^8$ encodes upcoming schedule events.
+Total state dimension: $d_s = 5 + 768 + 3 + 8 = 784$.
+
+\subsubsection{Hybrid Actor}
+The actor produces a hybrid action via three heads:
+\begin{itemize}
+  \item \textbf{Power}: Gaussian reparameterisation with sigmoid squashing.
+  Log-prob correction uses the correct sigmoid Jacobian:
+  $\log|\sigma'(u)| = \log(\sigma(u)(1 - \sigma(u)))$.
+  \item \textbf{Channel}: Gumbel-softmax with temperature $\tau$ (annealed
+  from 2.0 to 0.5 during training), enabling differentiable discrete channel
+  selection.
+  \item \textbf{Bandwidth}: Dirichlet distribution parametrised by
+  $\text{softplus}(\cdot) + 1$ concentrations, ensuring the 3-simplex
+  bandwidth vector sums to 1.
+\end{itemize}
+
+\subsubsection{Soft Actor-Critic Update}
+Standard SAC updates for critic (double-Q, Eq.~\ref{eq:critic})
+and actor (Eq.~\ref{eq:actor}) with entropy coefficient $\alpha$
+automatically tuned via:
+\begin{align}
+  \mathcal{L}_Q &= \mathbb{E}\!\left[
+    (Q(s,a) - r - \gamma \bar{Q}(s', \bar{a}') + \alpha \log \pi(\bar{a}'|s'))^2
+  \right], \label{eq:critic} \\
+  \mathcal{L}_\pi &= \mathbb{E}\!\left[
+    \alpha \log \pi(a|s) - Q(s,a)
+  \right]. \label{eq:actor}
+\end{align}
+
+\subsubsection{Bidirectional Joint Gradient (Core Novelty)}
+\label{sec:joint}
+After each SAC update cycle, the predictor parameters $\phi$ are updated by
+a joint loss that couples control objectives into the representation:
+\begin{equation}
+  \mathcal{L}_\mathrm{pred} =
+    \underbrace{\frac{1}{N\Delta}\sum_{i,k}\!\left(
+      \hat{L}_{i,k} - L^*_{i,k}
+    \right)^2}_{\text{MSE, all } \Delta \text{ steps}}
+    + \eta \cdot \mathcal{L}_\pi, \qquad \eta = 0.10.
+  \label{eq:joint}
+\end{equation}
+Gradients $\partial \mathcal{L}_\pi / \partial \phi$ flow back through
+the forward pass that generated $\bfz_\mathrm{fused}$, causing the predictor
+to favour representations that minimise future policy regret---not just
+prediction accuracy. We call this the \emph{bidirectional gradient bridge}.
+
+\subsection{Module 3: HierFed-KD}
+\label{sec:hierfed}
+
+\subsubsection{Zone FedAvg (Level 1)}
+APs are grouped into $Z$ venue zones (departure terminals, arrival halls, etc.).
+Every $T_\mathrm{local} = 100$ steps, quality-weighted FedAvg aggregates base
+network parameters within each zone:
+\begin{equation}
+  \theta^\mathrm{zone}_z = \sum_{i \in \mathcal{Z}_z} w_i \theta_i,
+  \quad w_i = \frac{\bar{r}_i}{\sum_j \bar{r}_j},
+\end{equation}
+where $\bar{r}_i$ is the exponential moving average reward of AP $i$.
+
+\subsubsection{Global FedProx (Level 2)}
+Every $T_\mathrm{global} = 500$ steps, zone-level models are aggregated globally
+with a proximal penalty anchored at the \emph{previous} global model
+$\theta_\mathrm{prev}$:
+\begin{equation}
+  \theta^* = \frac{\sum_z \theta^\mathrm{zone}_z + \mu \theta_\mathrm{prev}}{Z + \mu},
+  \quad \mu = 0.01.
+  \label{eq:fedprox}
+\end{equation}
+This differs from FedAvg in that it pulls the global model towards a stable
+prior (the previous round), preventing drift from heterogeneous zone updates.
+
+\subsubsection{Knowledge Distillation Compression}
+Instead of transmitting raw weight tensors, each zone model $k$ shares
+stochastic soft channel distributions $\pi_k^\mathrm{ch}$ (from Gumbel-softmax
+with $\tau = 1.0$) and bandwidth predictions $\mathbf{w}_k$ evaluated over
+$M = 100$ reference states. The global student model minimises:
+\begin{equation}
+  \mathcal{L}_\mathrm{KD} = \frac{1}{Z} \sum_k \left[
+    \mathrm{KL}(\pi_k^\mathrm{ch} \| \hat{\pi}^\mathrm{ch})
+    + \mathrm{MSE}(\mathbf{w}_k, \hat{\mathbf{w}})
+  \right].
+  \label{eq:kd}
+\end{equation}
+Soft distributions preserve policy diversity; sharing logits only (as in prior
+work) would collapse diversity because deterministic queries yield one-hot outputs.
+Communication savings: $M \times C \times 4 \text{ bytes}$ per zone $\ll$
+full parameter count ($\sim 350\text{K}$ floats), yielding a $11.5\times$
+compression ratio.
+
+\subsubsection{Adaptive Lagrangian Multiplier}
+AP capacity constraints are enforced without adding $r_\mathrm{cap}$ to the
+environment reward (which would double-count the penalty). Instead, the
+Lagrangian multiplier $\lambda_i$ updates exponentially:
+\begin{equation}
+  \lambda_i^{t+1} = \max\!\left(0, \lambda_i^t +
+    \rho \cdot \max(0, L_i^t - 0.9)\right), \quad \rho = 0.01.
+\end{equation}
+
+The complete training procedure is described in Algorithm~\ref{alg:main}.
+
+\begin{algorithm}[htbp]
+\caption{STAG-FedSAC Training}\label{alg:main}
+\begin{algorithmic}[1]
+\State \textbf{Initialise} ST-GCAT $\phi$; actors $\pi_\theta^i$, critics $Q_\psi^i$,
+       target critics $\bar{Q}^i$, replay buffers $\mathcal{B}_i$, Lagrangian
+       $\lambda_i = 0$ for all $i$.
+\For{episode $= 1, \dots, E$}
+  \State $o \leftarrow \text{env.reset}()$
+  \For{step $t = 1, \dots, T$}
+    \State Build $\mathbf{H}, \mathbf{S}, \mathbf{A}$ from $o$ \Comment{History update: \emph{once} per step}
+    \State $\bfz_\mathrm{fused}, \hat{L} \leftarrow \text{ST-GCAT}(\mathbf{H}, \mathbf{S}, \mathbf{A})$
+    \For{$i = 1, \dots, N$}
+      \State $a_i \sim \pi_\theta^i(\cdot | s_i)$ with $s_i$ from Eq.~\ref{eq:state}
+    \EndFor
+    \State $o', r, \mathrm{done} \leftarrow \text{env.step}(\{a_i\})$
+    \For{$i = 1, \dots, N$}
+      \State $\mathcal{B}_i.\mathrm{store}(s_i, a_i, r_i + \delta_p b_\mathrm{pred}
+             + \lambda_i \cdot \text{cap\_violation}, s_i')$
+    \EndFor
+    \If{$t \ge T_\mathrm{warmup}$ \textbf{and} $t \bmod U_\mathrm{freq} = 0$}
+      \State Update critics $Q^i$, actors $\pi^i$, temperature $\alpha$ via SAC
+      \State \textbf{Joint step}: $\phi \leftarrow \phi - \eta_\phi
+             \nabla_\phi \mathcal{L}_\mathrm{pred}$ (Eq.~\ref{eq:joint},
+             using $\mathbf{H}$ read-only)
+    \EndIf
+    \State Update $\lambda_i$ for all $i$
+    \If{$t \bmod T_\mathrm{local} = 0$} \textbf{Zone FedAvg} \EndIf
+    \If{$t \bmod T_\mathrm{global} = 0$} \textbf{Global FedProx + KD} \EndIf
+    \State $o \leftarrow o'$
+  \EndFor
+\EndFor
+\end{algorithmic}
+\end{algorithm}

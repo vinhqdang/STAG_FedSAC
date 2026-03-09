@@ -1,0 +1,95 @@
+% ========================================================
+% 2related_work.tex
+% ========================================================
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Spatio-Temporal Load Prediction for Wireless Networks}
+
+Spatio-temporal prediction of network traffic has evolved from standalone LSTM
+models~\cite{Shaabanzadeh2024} through graph-enhanced
+architectures~\cite{Jin2024} to multi-grained hybrid
+approaches~\cite{Liu2024}. Shaabanzadeh \textit{et al.}~\cite{Shaabanzadeh2024}
+showed that Transformers outperform CNN and LSTM on campus WiFi traces with
+100+ APs, while GraFSTNet~\cite{GraFSTNet2025} introduced dual-branch
+spatial-temporal fusion for cellular traffic. However, none of these works
+exploit structured event metadata (schedules, timetables) as cross-attention
+features, limiting performance during sudden, schedule-driven load transitions.
+Salami \textit{et al.}~\cite{Salami2024} explored federated LSTM with
+knowledge distillation for per-AP prediction but omit spatial graph context
+and schedule awareness. \textbf{STAG-FedSAC's ST-GCAT is the first predictor
+to bring schedule features into a graph cross-attention mechanism.}
+
+\subsection{Deep Reinforcement Learning for WiFi Resource Allocation}
+
+DDPG-based control of multi-AP dense WiFi deployments was studied by
+Zhang \textit{et al.}~\cite{Zhang2024}, who demonstrated cooperative access
+control benefits compared with static association. D3PG~\cite{Liu2024DRL}
+replaces DDPG with a diffusion policy for smoother action spaces.
+Szott \textit{et al.}~\cite{Szott2024} applied DQN and DDPG to
+IEEE~802.11ax contention window optimisation. SAC has emerged as superior
+for non-stationary wireless environments due to entropy
+regularisation~\cite{SACvsRIS2024}, and was adopted for NB-IoT
+fairness-energy trade-offs~\cite{SACNBIoT2024}. These prior works, however,
+treat power, channel, and bandwidth as separate or flat action spaces and do
+not augment the state with spatio-temporal graph embeddings from a predictor.
+
+\subsection{Prediction--Control Coupling in Wireless Optimisation}
+
+Integrating traffic forecasting with DRL has been studied in O-RAN
+slicing~\cite{Lotfi2024} and DQN with lookahead
+states~\cite{CNNLSTMDQN2025}. A key finding~\cite{ForecastDRL2024} is
+that a frozen predictor used as state augmentation degrades with prediction
+errors. STAG-FedSAC addresses this by jointly training predictor and policy,
+creating a feedback loop absent in prior work.
+
+\subsection{Federated Deep Reinforcement Learning}
+
+Federated DRL has been applied to contention window
+optimisation~\cite{Tu2025}, vehicular
+networks~\cite{AFL2025}, and energy-aware IoT
+scheduling~\cite{PerFedSAC2025}. E-FRL~\cite{Du2024} is the most relevant
+prior work: it applies federated DDPG to dense WiFi channel access with
+exponential weighted aggregation. STAG-FedSAC extends E-FRL by adding a
+two-level hierarchy, schedule-conditioned prediction, joint training, and
+knowledge distillation compression. Tu \textit{et al.}~\cite{Tu2025} proposed
+multi-agent DDPG with federated parameter sharing but without prediction-to-control
+coupling or personalised local heads. KD-AFRL~\cite{KDAFRL2025} uses KD for
+communication efficiency in IoT but without hierarchical zone-level aggregation.
+
+\subsection{Fairness in Multi-AP Wireless Networks}
+
+Jain's Fairness Index (JFI) is a standard metric for evaluating multi-user
+equity~\cite{Gurewitz2024}. Primal-dual (Lagrangian) methods have been
+applied to enforce capacity constraints in DDPG-based network
+slicing~\cite{PDDPG2024}, and fairness-constrained RL has been formalised
+through multi-agent MDP frameworks~\cite{FairMDP2024}. STAG-FedSAC adopts
+Lagrangian multipliers for capacity constraints while directly incorporating
+JFI into its reward function with per-class QoS thresholds.
+
+\subsection{Summary and Positioning}
+
+Table~\ref{tab:related} summarises the most relevant prior works.
+STAG-FedSAC is unique in combining all five desiderata---schedule-aware
+prediction, graph-embedded DRL state, joint training, hierarchical
+federation, and QoS-differentiated fairness---in a single framework.
+
+\begin{table}[htbp]
+\centering
+\caption{Comparison of STAG-FedSAC with related work.}
+\label{tab:related}
+\small
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Method} & \textbf{Schedule} & \textbf{Graph} & \textbf{Joint} & \textbf{Hier.\ Fed.} & \textbf{QoS Fair.} \\
+\midrule
+Shaabanzadeh~\cite{Shaabanzadeh2024} & \checkmark & $\times$ & $\times$ & $\times$ & $\times$ \\
+Zhang (DDPG)~\cite{Zhang2024}        & $\times$ & $\times$ & $\times$ & $\times$ & $\times$ \\
+E-FRL~\cite{Du2024}                  & $\times$ & $\times$ & $\times$ & $\times$ & $\times$ \\
+Salami (FedLSTM)~\cite{Salami2024}   & $\times$ & $\times$ & $\times$ & $\times$ & $\times$ \\
+Lotfi (O-RAN)~\cite{Lotfi2024}       & $\times$ & $\times$ & Partial & $\times$ & $\times$ \\
+PerFedSAC~\cite{PerFedSAC2025}       & $\times$ & $\times$ & $\times$ & $\times$ & \checkmark \\
+\textbf{STAG-FedSAC (ours)}          & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\
+\bottomrule
+\end{tabular}
+\end{table}

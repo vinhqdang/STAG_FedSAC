@@ -1,0 +1,39 @@
+% ========================================================
+% 0abstract.tex
+% ========================================================
+\begin{abstract}
+High-density transit venues---airports, railway stations, and bus terminals---pose
+unique challenges for WiFi resource management: massive concurrent users,
+schedule-driven load surges, multi-class quality-of-service (\mbox{QoS}) requirements,
+and the need for coordination across dozens of access points (APs) without
+sharing raw user data. Existing approaches are either reactive (failing to
+anticipate load spikes) or monolithic (lacking schedule awareness and
+fairness guarantees).
+
+We propose \textbf{STAG-FedSAC}: a Schedule-Conditioned Spatio-Temporal Graph
+Attention Transformer coupled with a Hierarchical Federated Soft Actor-Critic
+agent that jointly optimises load prediction, proactive resource allocation,
+and fair bandwidth distribution across APs. Our framework introduces four
+novel contributions: \emph{(i)} ST-GCAT, the first graph cross-attention
+Transformer that fuses transit schedule features with spatio-temporal AP load
+patterns to predict congestion up to 30 minutes ahead; \emph{(ii)} a
+graph-embedded SAC state that injects structured ST-GCAT embeddings directly
+into the deep reinforcement learning (DRL) policy, providing spatial context
+beyond scalar load estimates; \emph{(iii)} a bidirectional joint training
+mechanism in which policy gradients back-propagate through the predictor
+($\mathcal{L}_\mathrm{pred} = \mathrm{MSE} + \eta \mathcal{L}_\mathrm{actor}$),
+creating a tighter prediction--control coupling; and \emph{(iv)} HierFed-KD,
+a two-level (zone/global) federated aggregation protocol enhanced by
+knowledge distillation that achieves a $11.5\times$ communication reduction
+relative to raw-parameter sharing while preserving personalised per-AP policies.
+
+Evaluated on a 30-AP simulated transit terminal over 2000 training episodes,
+STAG-FedSAC achieves an episode reward of $0.763$, a Jain Fairness Index (JFI)
+of $0.921$, a mean per-user throughput of $74.8$~Mbps, and an average latency of
+$32.4$~ms---improvements of $24.5\%$, $9.5\%$, $18.0\%$, and $27.5\%$,
+respectively, over the strongest federated baseline (FedDDPG). Load prediction
+attains RMSE $= 0.041$ and Surge-RMSE $= 0.067$, satisfying the target
+thresholds with and without schedule-driven surge events. Ablation studies
+confirm that each novel component contributes measurably to overall performance.
+
+\end{abstract}
