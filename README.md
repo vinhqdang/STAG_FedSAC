@@ -1,6 +1,6 @@
 # STAG-FedSAC: Spatio-Temporal Attention Graph with Federated Soft Actor-Critic for Transit-Venue WiFi Optimization
 
-> **Target Journal**: Wireless Personal Communications (Springer)  
+> **Target Journal**: Knowledge-based Systems (Springer)  
 > **Status**: Implemented & Verified — March 2026
 
 ## Overview
