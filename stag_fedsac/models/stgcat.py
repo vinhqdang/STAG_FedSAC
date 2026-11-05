@@ -28,75 +28,42 @@ class PositionalEncoding(nn.Module):
 
 
 class SpatialGATLayer(nn.Module):
-    """Graph Attention Network layer operating on AP interference graph.
+    """Multi-head graph attention over the AP interference graph (per timestep).
 
-    Per-timestep attention over the AP topology with interference-weighted bias.
+    Dimensions (d_h = 128, K = 4 heads, d_k = d_h / K = 32):
+      W   in R^{d_h x d_h}   shared linear map, split into K blocks of d_k outputs
+      a^k in R^{2 d_k}       one attention vector per head; a^k = [a_l^k ; a_r^k], so that
+                             a^k^T [W h_i || W h_j] = a_l^k . (W h_i)^k + a_r^k . (W h_j)^k
+    Attention is restricted to graph neighbours (and self loops) and biased by the
+    interference weight A_ij.
     """
 
-    def __init__(self, d_h: int, n_heads: int, dropout: float = 0.1):
+    def __init__(self, d_h: int, n_heads: int, dropout: float = 0.1, edge_bias: float = 0.1):
         super().__init__()
         assert d_h % n_heads == 0
-        self.n_heads = n_heads
-        self.d_k = d_h // n_heads
-        self.d_h = d_h
-
+        self.n_heads, self.d_k, self.d_h = n_heads, d_h // n_heads, d_h
+        self.edge_bias = edge_bias
         self.W = nn.Linear(d_h, d_h, bias=False)
-        self.a = nn.Linear(2 * self.d_k, 1, bias=False)
+        self.a_l = nn.Parameter(torch.empty(n_heads, self.d_k))
+        self.a_r = nn.Parameter(torch.empty(n_heads, self.d_k))
+        nn.init.xavier_uniform_(self.a_l)
+        nn.init.xavier_uniform_(self.a_r)
         self.dropout = nn.Dropout(dropout)
         self.leaky_relu = nn.LeakyReLU(0.2)
 
     def forward(self, Z_h: torch.Tensor, A: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            Z_h: [batch, N, T, d_h]  — projected historical load features
-            A:   [N, N]              — interference adjacency (weighted, symmetric)
-        Returns:
-            Z_spatial: [batch, N, T, d_h]
-        """
-        B, N, T, d_h = Z_h.shape
-        # Transform node features
-        Wh = self.W(Z_h)  # [B, N, T, d_h]
-
-        # Reshape for multi-head: [B, N, T, n_heads, d_k]
-        Wh_mh = Wh.view(B, N, T, self.n_heads, self.d_k)
-
-        # Compute attention for all pairs per timestep
-        # Expand for pairwise: [B, N, 1, T, n_heads, d_k] vs [B, 1, N, T, n_heads, d_k]
-        Wh_i = Wh_mh.unsqueeze(2).expand(-1, -1, N, -1, -1, -1)
-        Wh_j = Wh_mh.unsqueeze(1).expand(-1, N, -1, -1, -1, -1)
-
-        # Attention scores: e_ij = LeakyReLU(a^T[Wh_i || Wh_j])
-        pair_cat = torch.cat([Wh_i, Wh_j], dim=-1)  # [B, N, N, T, n_heads, 2*d_k]
-        e = self.leaky_relu(self.a(pair_cat).squeeze(-1))  # [B, N, N, T, n_heads]
-
-        # Mask non-edges and add interference bias
-        mask = (A > 0).float()  # [N, N]
-        # Add self-loops
-        mask = mask + torch.eye(N, device=A.device)
-        mask = mask.clamp(max=1.0)
-
-        # Reshape mask for broadcasting: [1, N, N, 1, 1]
-        mask_exp = mask.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
-        e = e.masked_fill(mask_exp == 0, -1e9)
-
-        # Add interference weight bias
-        A_bias = (A * 0.1).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)  # [1, N, N, 1, 1]
-        e = e + A_bias
-
-        alpha = F.softmax(e, dim=2)  # softmax over source nodes j
-        alpha = self.dropout(alpha)
-
-        # Apply attention: aggregate neighbor features
-        # alpha: [B, N, N, T, n_heads], Wh_mh: [B, N, T, n_heads, d_k]
-        # We need: for each (i, t, head): sum_j alpha[i,j,t,head] * Wh[j,t,head]
-        Wh_j_vals = Wh_mh.unsqueeze(1).expand(-1, N, -1, -1, -1, -1)
-        # [B, N, N, T, n_heads, d_k]
-        alpha_exp = alpha.unsqueeze(-1)  # [B, N, N, T, n_heads, 1]
-        h_new = (alpha_exp * Wh_j_vals).sum(dim=2)  # [B, N, T, n_heads, d_k]
-
-        # Concatenate heads
-        h_new = h_new.reshape(B, N, T, d_h)
-        return F.elu(h_new)
+        """Z_h: [B, N, T, d_h]; A: [N, N] (weighted, symmetric) -> [B, N, T, d_h]."""
+        B, N, T, _ = Z_h.shape
+        Wh = self.W(Z_h).view(B, N, T, self.n_heads, self.d_k)           # [B,N,T,K,d_k]
+        el = (Wh * self.a_l).sum(-1)                                       # [B,N,T,K]  (target i)
+        er = (Wh * self.a_r).sum(-1)                                       # [B,N,T,K]  (source j)
+        e = self.leaky_relu(el.unsqueeze(2) + er.unsqueeze(1))             # [B,N(i),N(j),T,K]
+        mask = ((A > 0).float() + torch.eye(N, device=A.device)).clamp(max=1.0)
+        e = e.masked_fill(mask.view(1, N, N, 1, 1) == 0, -1e9)
+        e = e + (A * self.edge_bias).view(1, N, N, 1, 1)
+        alpha = self.dropout(F.softmax(e, dim=2))                          # normalise over sources j
+        out = torch.einsum("bijtk,bjtkd->bitkd", alpha, Wh)                # [B,N,T,K,d_k]
+        return F.elu(out.reshape(B, N, T, self.d_h))
 
 
 class TemporalTransformer(nn.Module):

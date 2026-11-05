@@ -1,6 +1,6 @@
 % ========================================================
 % main.tex — STAG-FedSAC Manuscript
-% Target: Knowledge-Based Systems (Elsevier)
+% Target: Journal of Network and Systems Management (revision 1)
 % ========================================================
 \documentclass[review,12pt]{elsarticle}
 
@@ -14,7 +14,7 @@
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 \usepackage{subcaption}
-\usepackage{cite}
+\usepackage{adjustbox}
 \usepackage{url}
 
 % ── Path for figures ────────────────────────────────────
@@ -29,23 +29,21 @@
 \newcommand{\Rset}{\mathbb{R}}
 
 % ── Journal metadata ────────────────────────────────────
-\journal{Knowledge-Based Systems}
+\journal{Journal of Network and Systems Management}
 
 \begin{document}
 
 \begin{frontmatter}
 
-\title{STAG-FedSAC: Schedule-Conditioned Spatio-Temporal Graph Attention with
-       Hierarchical Federated Soft Actor-Critic for Proactive WiFi Optimization
-       in Transit Venues}
+\title{From Reactive to Predictive: A Federated Graph-Attention SAC Framework for Schedule-Driven WiFi Optimization in High-Density Transit Venues}
 
-\author[a]{Quang-Vinh Dang\corref{cor1}}
+\author[a]{Quang-Vinh Dang\corref{cor1}\fnref{orcid}}
 \ead{vinh.dq4@buv.edu.vn}
 
 \cortext[cor1]{Corresponding author}
+\fntext[orcid]{ORCID: 0000-0002-3877-8024}
 \affiliation[a]{organization={British University Vietnam},
-                addressline={Ecopark Township, Hung Yen},
-                city={Hanoi},
+                city={Hung Yen},
                 country={Vietnam}}
 
 \input{0abstract}

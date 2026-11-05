@@ -1,0 +1,75 @@
+% ========================================================
+% 4exp_setup.tex  (included by 4exp.tex)
+% ========================================================
+\subsection{Simulator}
+\label{sec:sim}
+
+All experiments use a Python simulator of a transit terminal with $N=30$ APs on a $6\times5$ grid (30~m spacing, 2~m position jitter) in $Z=3$ zones ($i \bmod 3$). It is a quasi-static model: all quantities are computed once per 5-minute control interval, for the users present in that interval. Table~\ref{tab:sim} lists the parameters. The simulator was extended for this revision with an explicit contention model, a channel-switching cost and the EDCA-style airtime mapping of Section~\ref{sec:deploy}.
+
+\paragraph{Radio.} Path loss is $PL(d)=46.4+30\log_{10}d$~dB (5~GHz, indoor), noise $-95$~dBm, and $C=11$ orthogonal 20~MHz channels (adjacent-channel leakage is not modelled). A user associates to its nearest AP. The PHY rate of user $u$ is $R_u=\min\{156,\ 0.75\cdot20\log_2(1+\mathrm{SINR}_u)\}$~Mbps (2~spatial streams, 256-QAM cap), with at least 1~Mbps.
+
+\paragraph{MAC contention.} Two APs that can hear each other (received power $\ge-82$~dBm in either direction) and share a channel form a \emph{carrier-sense domain}: they time-share the medium, each receiving the airtime fraction $n_i/\sum_{j\in\mathcal{D}_i}n_j$ of the domain's users, and they do not interfere with each other. Only co-channel APs outside the domain add interference to the SINR (hidden terminals are not modelled). With $m_i=\max(1,\lfloor 0.25\sum_{j\in\mathcal{D}_i}n_j\rceil)$ backlogged stations in the domain, the fraction of airtime that carries payload is the saturation efficiency $\eta(m_i)$ of the IEEE~802.11 DCF obtained from Bianchi's fixed-point model~\cite{bianchi2000} (802.11ac timings, 16-MPDU A-MPDUs, $\mathrm{CW}_{\min}=16$, 6 back-off stages; $\eta(1)=0.87$, $\eta(10)=0.70$, $\eta(50)=0.56$, $\eta(100)=0.50$). The airtime available to AP $i$ is $\rho^{\mathrm{avail}}_i=\eta(m_i)\,n_i/\sum_{j\in\mathcal{D}_i}n_j$. User $u$ of class $c$ is offered a constant rate $d_c$ (0.1, 3 and 1~Mbps for VoIP, video and best-effort) and obtains the part of it that fits into its class's airtime budget (Section~\ref{sec:deploy}, with redistribution of unused airtime).
+
+\paragraph{Latency.} The per-class latency is $5+s_i\,[1+\varrho/(2(1-\varrho))]$~ms, an M/G/1-type delay with the domain service time $s_i=(\text{A-MPDU payload time})/\eta(m_i)$ and $\varrho=\min(0.98,\ \text{airtime needed by the class}/\text{airtime granted to it})$; if the class is overloaded ($\varrho>0.98$) the delay rises linearly to the 500~ms buffer limit as $\varrho$ grows to 1.48. A channel switch adds half of the outage time to the delay of the AP's users (Section~\ref{sec:deploy}). Latency in this model is therefore never a constant: it depends on the number of contending stations, the class budget and the load.
+
+\paragraph{Users and surges.} At the start of an episode between 500 and 1000 users are placed uniformly in the venue (20\% VoIP, 30\% video, 50\% best-effort) and move by a 2~m random walk per interval. An episode is 12 intervals (1~hour) and contains 3--7 timetable events (departure or arrival, 50--300 passengers, random zone and time). Around each event passengers join the venue for two intervals, at most 100 per interval, producing the load surges that the schedule announces. Timetable data are synthetic.
+
+\paragraph{Metrics.} \emph{Reward} is the unscaled Eq.~\eqref{eq:reward} without $b^{\mathrm{pred}}$ averaged over APs and intervals. \emph{Throughput} is the mean per-user throughput (Mbps), \emph{latency} the mean per-user latency, \emph{JFI} Jain's index of the user satisfaction ratios $\varsigma_u$ over all users of the venue, \emph{QoS satisfaction} the fraction of users that meet their class requirement (SINR, latency and $\varsigma_u\ge0.5$), \emph{energy efficiency} the total throughput divided by the power drawn by all APs ($6$~W static plus transmit power divided by a PA efficiency of $0.3$), and \emph{switches} the fraction of APs that change channel per interval. Forecast quality is measured by RMSE and MAE over all $\Delta=6$ horizons (and for $h=1$ only), MAPE on loads above 0.05, and \emph{Surge-RMSE}: the RMSE over AP/interval pairs that lie within one interval of a scheduled event with at least 100 passengers in the AP's zone (Normal-RMSE: all other pairs).
+
+\subsection{Compared Methods}
+\label{sec:baselines}
+
+\begin{itemize}
+  \item \textbf{SSF} (strongest signal first, static): users keep their strongest AP, fixed round-robin channel plan, mid power, equal airtime split.
+  \item \textbf{LLF} (least loaded first, reactive): lowers power on overloaded APs and raises it on idle ones, splits airtime by the observed QoS mix, fixed channel plan.
+  \item \textbf{LSTM-DRL}: an LSTM forecasts the next loads of each AP from its own history (no graph, no schedule); one DDPG agent \emph{shared by all APs} acts on the local features, the QoS mix and the scalar one-step forecast. No federation.
+  \item \textbf{FedDDPG} (adapted from~\cite{du2024}): one DDPG agent per AP, flat FedAvg of actor and critic every $T_{\mathrm{local}}$ steps, no forecast, no schedule.
+  \item \textbf{STAG-FedSAC} and its ablations: \textbf{A1} no joint gradient ($\eta=0$; predictor still trained on the forecast error), \textbf{A2} no schedule (the schedule tensor and the schedule part of the state are zeroed), \textbf{A3} no embedding ($\mathbf{Z}_{\mathrm{fused}}$ in the state is zeroed).
+  \item \textbf{Federation variants} (Section~\ref{sec:exp-fed}): isolated agents, flat FedAvg, zone FedAvg only (Level~1), zone FedAvg with weight-based global FedProx, and a pooled-experience learner.
+  \item \textbf{Persistence}: a forecast reference that predicts the current load for all horizons (with SSF control).
+\end{itemize}
+All learned methods are trained with the same protocol (same simulator, the same reward plus Lagrangian penalty and reward scale, 200 warm-up episodes of exploration around the incumbent configuration, replay buffer, one gradient update per environment step, same number of episodes) and are evaluated on the same held-out episodes. The two DDPG baselines use Gaussian exploration noise $\sigma=0.2$ and encode the channel as one continuous output rounded to an index. We did not tune any method separately; hyperparameters are shared wherever the architectures allow it.
+
+\subsection{Protocol and Hyperparameters}
+\label{sec:protocol}
+
+\input{tables/protocol_text}
+
+\begin{table}[htbp]
+\centering
+\caption{Hyperparameters (identical for all learned methods where applicable); the incumbent configuration is round-robin channels, 14~dBm, equal airtime.}
+\label{tab:hyper}
+\small
+\begin{tabular}{lll}
+\toprule
+\textbf{Parameter} & \textbf{Symbol} & \textbf{Value} \\
+\midrule
+\multicolumn{3}{l}{\emph{Environment}} \\
+\quad APs / channels / zones & $N, C, Z$ & 30, 11, 3 \\
+\quad Control interval / episode & & 5 min / 12 intervals \\
+\quad History window / forecast horizon & $T,\Delta$ & 12 (60 min) / 6 (30 min) \\
+\quad Channel-switch outage / airtime granularity & $t_{\mathrm{sw}}$ / EDCA levels & 3 s / 1/16 \\
+\multicolumn{3}{l}{\emph{Reward}} \\
+\quad Throughput, latency, fairness, QoS, prediction & $\alpha,\beta,\gamma,\delta,\delta_p$ & 0.40, 0.25, 0.20, 0.05, 0.10 \\
+\quad Reward scale for learning & $R_{\mathrm{s}}$ & 10 \\
+\multicolumn{3}{l}{\emph{ST-GCAT}} \\
+\quad GAT / Transformer heads, layers, $d_h$ & $K$, $L$, $d_h$ & 4, 2, 128 \\
+\quad Predictor learning rate, batch & $\eta_\phi$ & $5\times10^{-4}$, 16 samples \\
+\quad Joint gradient weight & $\eta$ & 0.10 \\
+\multicolumn{3}{l}{\emph{SAC}} \\
+\quad Actor / critic hidden layers & & [256, 256] (+128 personal head) \\
+\quad Batch, replay size per AP & & 256, 24{,}000 transitions (all episodes) \\
+\quad Learning rate actor, critic, temperature & & $3\times10^{-4}$ \\
+\quad Discount / soft target update & $\gamma,\tau$ & 0.99 / 0.005 \\
+\quad Initial temperature / target entropy & & 0.05 / $-3$ \\
+\quad Gumbel-softmax temperature & & 2.0 $\to$ 0.5 (linear) \\
+\quad Embedding scale in the state & $\kappa$ & 0.03 (chosen from $\{1,0.125,0.03\}$) \\
+\multicolumn{3}{l}{\emph{HierFed-KD}} \\
+\quad Zone / global round & $T_\ell,T_g$ & 100 / 500 steps \\
+\quad Proximal weight, quality temperature & $\mu,\tau_w$ & 0.01, 0.1 \\
+\quad Reference states, distillation steps, lr & $M$ & 100, 20, $5\times10^{-4}$ \\
+\multicolumn{3}{l}{\emph{Constraint}} \\
+\quad Utilisation limit, step, bound & $u_{\max},\rho_\lambda,\lambda_{\max}$ & 0.9, 0.01, 1 \\
+\bottomrule
+\end{tabular}
+\end{table}

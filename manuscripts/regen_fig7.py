@@ -53,7 +53,7 @@ m1bg = FancyBboxPatch((0.4, 5.5), 12.0, 3.0,
                       facecolor="#F1F8E9", edgecolor="#558B2F",
                       linewidth=1.5, linestyle="--", zorder=1)
 ax.add_patch(m1bg)
-ax.text(6.4, 8.62, "Module 1: ST-GCAT Predictor  [NOVEL]",
+ax.text(6.4, 8.62, "Module 1: ST-GCAT Predictor  ",
         ha="center", va="center", fontsize=12, fontweight="bold",
         color="#33691E", zorder=3)
 
@@ -63,7 +63,7 @@ m2bg = FancyBboxPatch((0.4, 2.6), 12.0, 2.65,
                       facecolor="#E3F2FD", edgecolor="#1565C0",
                       linewidth=1.5, linestyle="--", zorder=1)
 ax.add_patch(m2bg)
-ax.text(6.4, 5.35, "Module 2: Graph-SAC Agent  [NOVEL state]",
+ax.text(6.4, 5.35, "Module 2: Per-AP Graph-SAC agents",
         ha="center", va="center", fontsize=12, fontweight="bold",
         color="#0D47A1", zorder=3)
 
@@ -73,7 +73,7 @@ m3bg = FancyBboxPatch((0.4, 0.35), 12.0, 2.0,
                       facecolor="#FFF8E1", edgecolor="#E65100",
                       linewidth=1.5, linestyle="--", zorder=1)
 ax.add_patch(m3bg)
-ax.text(6.4, 2.42, "Module 3: HierFed-KD  [NOVEL federation]",
+ax.text(6.4, 2.42, "Module 3: HierFed-KD",
         ha="center", va="center", fontsize=12, fontweight="bold",
         color="#BF360C", zorder=3)
 
@@ -81,14 +81,14 @@ ax.text(6.4, 2.42, "Module 3: HierFed-KD  [NOVEL federation]",
 # MODULE 1 BLOCKS
 # ═══════════════════════════════════════════════════════════════════════
 box(0.65, 5.85, 2.5, 2.3,
-    "Spatial GAT", "Interference graph A\n(RSSI-based edges)",
+    "Spatial GAT", "Interference graph A\n(distance-weighted edges)",
     "#DCEDC8", "#33691E", 9.5, 8)
 box(3.45, 5.85, 2.7, 2.3,
     "Temporal\nTransformer", "History H[t-T:t]\n(12 steps = 60 min)",
     "#DCEDC8", "#33691E", 9.5, 8)
 box(6.45, 5.85, 2.9, 2.3,
     "Schedule\nCross-Attention",
-    "S[t:t+Delta]  [NOVEL]\nFlight/train schedule",
+    "S[t:t+Delta]\nTimetable features",
     "#C5E1A5", "#1B5E20", 9.5, 8)
 box(9.65, 5.85, 2.55, 2.3,
     "Prediction\nHead",
@@ -113,11 +113,11 @@ box(4.15, 2.85, 3.2, 2.2,
     "#BBDEFB", "#1565C0", 9.5, 8)
 box(7.65, 2.85, 2.5, 2.2,
     "Replay Buffer",
-    "Per-AP ring buffer\n100k transitions",
+    "Private per-AP buffer\n(stays at the AP)",
     "#BBDEFB", "#1565C0", 9.5, 8)
 box(10.45, 2.85, 1.8, 2.2,
     "Lagrangian\nMult.",
-    "lambda_i\nCapacity C2",
+    "lambda_i\nAirtime util. <= 0.9",
     "#BBDEFB", "#1565C0", 9.5, 8)
 
 # Arrows inside M2
@@ -137,7 +137,7 @@ ax.annotate("", xy=(1.35, 5.85), xytext=(1.35, 5.05),
             arrowprops=dict(arrowstyle="<|-|>", color="#6A1B9A", lw=2.8,
                             mutation_scale=18))
 label(0.05, 5.45,
-      "Bidirectional\ngradient bridge\neta * L_actor -> phi\n[NOVEL]",
+      "Joint gradient\neta * L_actor -> phi",
       col="#6A1B9A", fs=8.2, ha="left")
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -145,11 +145,11 @@ label(0.05, 5.45,
 # ═══════════════════════════════════════════════════════════════════════
 box(0.65, 0.6, 5.4, 1.5,
     "Zone FedAvg  (Level 1)",
-    "Quality-weighted aggregation, T_local = 100 steps\nPersonalised base per zone",
+    "Quality-weighted averaging of base layers\nT_local = 100 steps; heads stay personal",
     "#FFE0B2", "#E65100", 9.5, 8)
 box(6.35, 0.6, 6.0, 1.5,
-    "Global FedProx + KD  (Level 2)",
-    "FedProx anchor = prev global model, mu=0.01\nKD compression ~11.5x, T_global = 500 steps",
+    "Proximal distillation across zones  (Level 2)",
+    "Soft policy outputs on a public reference set\n(no weights exchanged), T_global = 500 steps",
     "#FFE0B2", "#E65100", 9.5, 8)
 
 # M2 -> M3 arrows
@@ -160,14 +160,14 @@ arr(9.15, 2.85, 9.15, 2.10, col="#E65100", lw=1.8)
 # M3 -> M2 feedback
 ax.annotate("", xy=(12.8, 2.85), xytext=(12.8, 2.10),
             arrowprops=dict(arrowstyle="<-", color="#E65100", lw=1.8))
-label(13.5, 2.45, "Global model\ndistributed\nto APs", col="#E65100", fs=8)
+label(13.5, 2.45, "Consensus\noutputs to\nzones", col="#E65100", fs=8)
 
 # ═══════════════════════════════════════════════════════════════════════
 # ENVIRONMENT BOX (right side)
 # ═══════════════════════════════════════════════════════════════════════
 box(13.1, 3.7, 2.65, 4.6,
-    "Transit\nVenue\nEnv.",
-    "30 APs\n3 Zones\nUsers\nSchedule",
+    "Venue",
+    "30 APs, 3 zones\nusers, timetable\nMAC contention\nswitching cost",
     "#FCE4EC", "#880E4F", 9.5, 8)
 
 # Action -> Env
@@ -185,7 +185,7 @@ legend_patches = [
     mpatches.Patch(facecolor="#BBDEFB", edgecolor="#1565C0", label="Graph-SAC (control)"),
     mpatches.Patch(facecolor="#FFE0B2", edgecolor="#E65100", label="HierFed-KD (federation)"),
     mpatches.Patch(facecolor="white",   edgecolor="#6A1B9A",
-                   label="Bidirectional gradient bridge [NOVEL]"),
+                   label="Bidirectional gradient bridge "),
 ]
 ax.legend(handles=legend_patches, loc="lower right",
           bbox_to_anchor=(1.0, 0.0), fontsize=9,

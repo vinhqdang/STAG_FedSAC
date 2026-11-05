@@ -1,299 +1,159 @@
 """
-HierFed-KD: Hierarchical Federated Aggregation with Knowledge Distillation.
-Module 3 — Two-level zone/global federation with KD compression.
+HierFed-KD: hierarchical federation of the per-AP actors.
+
+Federated parameters: the actor *base* layers. Heads (personalisation) and the
+critics never leave the AP.
+
+Modes
+-----
+none      isolated agents (no sharing)
+flat      single-level FedAvg over all APs (cloud server), every T_local steps
+zone      Level 1 only: quality-weighted FedAvg inside each venue zone
+hier_avg  Level 1 + weight-based global FedProx (zone models exchanged as weights)
+hier_kd   Level 1 + proximal federated distillation across zones: zones exchange
+          soft policy outputs on a public reference set instead of weights
+
+``CommMeter`` counts the bytes of every message so that communication claims
+are measured from the actual tensors, not asserted.
 """
-import copy
+from __future__ import annotations
+
 from collections import defaultdict
 
+import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
+BYTES = 4  # float32
 
-class HierFedKD:
-    """Hierarchical Federated Learning coordinator.
 
-    Level 1: Zone-level quality-weighted FedAvg (every T_local steps)
-    Level 2: Global FedProx + KD distillation (every T_global steps)
-    """
+class CommMeter:
+    def __init__(self):
+        self.intra_zone = 0      # AP <-> zone controller (local network)
+        self.inter_zone = 0      # zone controller <-> venue/cloud server (wide area)
+        self.reference_set = 0   # public reference states shipped to the zones
 
-    def __init__(
-        self,
-        zone_assignments: dict[int, int],  # ap_id → zone_id
-        n_zones: int = 3,
-        fedprox_mu: float = 0.01,
-        lr_kd: float = 5e-4,
-        s_ref_size: int = 100,
-        device: torch.device = torch.device("cpu"),
-    ):
-        """
-        Args:
-            zone_assignments: mapping from AP index to zone index
-            n_zones:          number of venue zones
-            fedprox_mu:       proximal term weight
-            lr_kd:            learning rate for KD distillation
-            s_ref_size:       number of reference states for KD
-        """
-        self.zone_assignments = zone_assignments
-        self.n_zones = n_zones
-        self.fedprox_mu = fedprox_mu
-        self.lr_kd = lr_kd
-        self.s_ref_size = s_ref_size
-        self.device = device
+    def total_inter(self) -> int:
+        return self.inter_zone + self.reference_set
 
-        # Build zone → AP mapping
-        self.zone_aps: dict[int, list[int]] = defaultdict(list)
-        for ap_id, zone_id in zone_assignments.items():
-            self.zone_aps[zone_id].append(ap_id)
+    def as_dict(self) -> dict:
+        return dict(intra_zone=self.intra_zone, inter_zone=self.inter_zone,
+                    reference_set=self.reference_set, wan_total=self.total_inter())
 
-        # Rolling reward tracking for quality weights
-        self.reward_history: dict[int, list[float]] = defaultdict(list)
-        self.reward_window = 50
-        self.baseline_rewards: dict[int, float] = defaultdict(float)
 
-        # Reference state buffer for KD
-        self.s_ref: torch.Tensor | None = None
+class Federation:
+    def __init__(self, zone_vec: np.ndarray, mode: str = "hier_kd", mu: float = 0.01,
+                 lr_kd: float = 5e-4, kd_steps: int = 20, n_channels: int = 11,
+                 m_ref: int = 100, quality_temp: float = 0.1, device: torch.device = torch.device("cpu")):
+        assert mode in ("none", "flat", "zone", "hier_avg", "hier_kd")
+        self.mode, self.mu, self.lr_kd, self.kd_steps = mode, mu, lr_kd, kd_steps
+        self.n_channels, self.m_ref, self.quality_temp, self.device = n_channels, m_ref, quality_temp, device
+        self.zone_vec = zone_vec
+        self.n = len(zone_vec)
+        self.zones = [torch.tensor(np.nonzero(zone_vec == z)[0], device=device) for z in sorted(set(zone_vec.tolist()))]
+        self.ema = torch.zeros(self.n, device=device)
+        self.anchor: list[torch.Tensor] | None = None     # last received base (proximal anchor)
+        self.global_prev: list[torch.Tensor] | None = None
+        self.meter = CommMeter()
 
-        # Previous global model — used as FedProx anchor.
-        # On first round this is None and we fall back to FedAvg.
-        self._global_model_prev: dict | None = None
+    @property
+    def uses_prox(self) -> bool:
+        return self.mode in ("hier_avg", "hier_kd")
 
-        # Global model state dict (initialized on first aggregation)
-        self.global_base_state: dict | None = None
+    # -- bookkeeping --------------------------------------------------------------
+    def update_reward(self, r: torch.Tensor) -> None:
+        self.ema = 0.95 * self.ema + 0.05 * r
 
-    def update_reward(self, ap_id: int, reward: float) -> None:
-        """Track rolling reward for quality-weighted aggregation."""
-        self.reward_history[ap_id].append(reward)
-        if len(self.reward_history[ap_id]) > self.reward_window:
-            self.reward_history[ap_id].pop(0)
+    @staticmethod
+    def _n_params(actor) -> int:
+        return int(sum(p[0].numel() for p in actor.base_parameters()))
 
-    def _compute_quality_weights(self, ap_ids: list[int]) -> dict[int, float]:
-        """Compute softmax quality weights based on rolling reward advantage."""
-        scores = {}
-        for ap_id in ap_ids:
-            rewards = self.reward_history[ap_id]
-            if len(rewards) > 0:
-                avg_reward = sum(rewards) / len(rewards)
-                score = avg_reward - self.baseline_rewards[ap_id]
-                self.baseline_rewards[ap_id] = avg_reward
+    def _weights(self, idx: torch.Tensor) -> torch.Tensor:
+        return torch.softmax(self.ema[idx] / self.quality_temp, dim=0)
+
+    def _snapshot(self, actor) -> None:
+        self.anchor = [p.detach().clone() for p in actor.base_parameters()]
+
+    # -- level 1 ------------------------------------------------------------------
+    @torch.no_grad()
+    def zone_round(self, actor) -> None:
+        if self.mode == "none":
+            return
+        if self.mode == "flat":
+            idx = torch.arange(self.n, device=self.device)
+            for p in actor.base_parameters():
+                p.data[idx] = p.data[idx].mean(dim=0, keepdim=True).expand_as(p.data[idx])
+            self.meter.inter_zone += 2 * self.n * self._n_params(actor) * BYTES
+            self._snapshot(actor)
+            return
+        for idx in self.zones:
+            w = self._weights(idx)
+            for p in actor.base_parameters():
+                shape = (-1,) + (1,) * (p.dim() - 1)
+                avg = (p.data[idx] * w.view(shape)).sum(dim=0, keepdim=True)
+                p.data[idx] = avg.expand_as(p.data[idx])
+            self.meter.intra_zone += 2 * len(idx) * self._n_params(actor) * BYTES
+        self._snapshot(actor)
+
+    # -- level 2 ------------------------------------------------------------------
+    @torch.no_grad()
+    def global_round_avg(self, actor) -> None:
+        zone_means = [[p.data[idx[0]].clone() for p in actor.base_parameters()] for idx in self.zones]
+        Z = len(zone_means)
+        new = []
+        for k, p in enumerate(actor.base_parameters()):
+            s = sum(zm[k] for zm in zone_means)
+            if self.global_prev is None:
+                new.append(s / Z)
             else:
-                score = 0.0
-            scores[ap_id] = score
+                new.append((s + self.mu * self.global_prev[k]) / (Z + self.mu))
+        self.global_prev = [t.clone() for t in new]
+        for k, p in enumerate(actor.base_parameters()):
+            p.data[:] = new[k].unsqueeze(0).expand_as(p.data)
+        self.meter.inter_zone += 2 * Z * self._n_params(actor) * BYTES
+        self._snapshot(actor)
 
-        # Softmax
-        max_score = max(scores.values()) if scores else 0.0
-        exp_scores = {k: torch.exp(torch.tensor(v - max_score)) for k, v in scores.items()}
-        total = sum(exp_scores.values())
-        return {k: (v / total).item() for k, v in exp_scores.items()}
+    def global_round_kd(self, actor, s_ref: torch.Tensor) -> None:
+        """Zones exchange soft outputs on the public reference set s_ref [M, S].
 
-    def zone_aggregation(
-        self, actors: dict[int, nn.Module]
-    ) -> None:
-        """Level 1: Zone-level quality-weighted FedAvg on base layers.
-
-        Each zone aggregates base parameters from its APs using quality weights.
-        Personal heads remain untouched.
-        """
-        for zone_id, ap_ids in self.zone_aps.items():
-            if len(ap_ids) <= 1:
-                continue
-
-            weights = self._compute_quality_weights(ap_ids)
-
-            # Aggregate base parameters
-            base_state_avg = {}
-            for ap_id in ap_ids:
-                w = weights[ap_id]
-                base_state = {
-                    k: v.clone()
-                    for k, v in actors[ap_id].base.state_dict().items()
-                }
-                for k, v in base_state.items():
-                    if k not in base_state_avg:
-                        base_state_avg[k] = v * w
-                    else:
-                        base_state_avg[k] += v * w
-
-            # Distribute aggregated base back to zone APs
-            for ap_id in ap_ids:
-                actors[ap_id].base.load_state_dict(base_state_avg)
-
-    def _fedprox_aggregate(
-        self,
-        zone_base_states: list[dict],
-        mu: float = 0.01,
-    ) -> dict:
-        """FedProx aggregation across zone models.
-
-        Proximal objective (Li et al., 2020):
-            w* = argmin_w  Σ_z ||w - w_z||² + (μ/2)||w - w_prev||²
-
-        Analytic solution:
-            w* = (Σ_z w_z + μ·w_prev) / (Z + μ)
-
-        Anchor w_prev is the PREVIOUS global model, NOT the current mean.
-        Using anchor=current_mean would make the formula reduce to plain FedAvg
-        (since Σw_z + μ*(Σw_z/n) = Σw_z*(1+μ/n) and divides by (n+μ) ≈ n).
-        """
-        n = len(zone_base_states)
-        if n == 0:
-            return {}
-
-        # FedAvg mean (baseline / first-round fallback when no prev global exists)
-        fedavg_mean = {
-            k: sum(s[k].float() for s in zone_base_states) / n
-            for k in zone_base_states[0].keys()
-        }
-
-        if self._global_model_prev is None:
-            # First round: no prior global model → plain FedAvg
-            return fedavg_mean
-
-        # FedProx: pull towards previous global model
-        global_state = {}
-        for k in fedavg_mean.keys():
-            if k not in self._global_model_prev:
-                global_state[k] = fedavg_mean[k]
-                continue
-            w_prev = self._global_model_prev[k].to(zone_base_states[0][k].device).float()
-            numerator = sum(s[k].float() for s in zone_base_states) + mu * w_prev
-            global_state[k] = numerator / (n + mu)
-
-        return global_state
-
-    def global_aggregation(
-        self, actors: dict[int, nn.Module],
-    ) -> None:
-        """Level 2: Global FedProx aggregation + KD distillation.
-
-        Aggregates zone-level models into a global model and distributes
-        the global base back to all APs.
-        """
-        # Collect zone-level base states (one per zone, using first AP as representative)
-        zone_base_states = []
-        for zone_id in sorted(self.zone_aps.keys()):
-            ap_ids = self.zone_aps[zone_id]
-            if ap_ids:
-                base_state = {
-                    k: v.clone()
-                    for k, v in actors[ap_ids[0]].base.state_dict().items()
-                }
-                zone_base_states.append(base_state)
-
-        if not zone_base_states:
-            return
-
-        # FedProx aggregation (uses _global_model_prev as anchor if available)
-        global_base = self._fedprox_aggregate(zone_base_states)
-        # Save current global model as anchor for the NEXT global round
-        self._global_model_prev = {k: v.clone().cpu() for k, v in global_base.items()}
-        self.global_base_state = global_base
-
-        # Knowledge Distillation step (if reference states available)
-        if self.s_ref is not None:
-            global_base = self._knowledge_distillation(actors, global_base)
-
-        # Distribute global base to all APs
-        for ap_id, actor in actors.items():
-            actor.base.load_state_dict(global_base)
-
-    def _knowledge_distillation(
-        self,
-        actors: dict[int, nn.Module],
-        global_base: dict,
-    ) -> dict:
-        """KD compression: distill soft action distributions from all APs.
-
-        Instead of sharing raw weights, each AP sends soft action distributions
-        over shared reference states. ~10× smaller than raw parameter sharing.
-
-        KL direction: KL(local_teacher || global_student) — global student
-        minimises divergence from each local teacher.
-        """
-        template_ap = list(actors.keys())[0]
-        global_actor = copy.deepcopy(actors[template_ap])
-        global_actor.base.load_state_dict(global_base)
-        global_actor.to(self.device)
-        global_actor.train()
-
-        optimizer = torch.optim.Adam(global_actor.base.parameters(), lr=self.lr_kd)
-
-        s_ref = self.s_ref.to(self.device)
-
-        # Collect stochastic teacher distributions from local APs (no grad)
-        local_ch_logits = []   # list of [M, C] softmax distributions per AP
-        local_bw_list   = []   # list of [M, 3] per AP
+        Each zone controller averages its APs' outputs (zone teacher); the server
+        averages the zone teachers (the closed-form minimiser of the KD objective
+        sum_z KL(pi_z || pi) + MSE(w_z, w)) and returns the consensus; every AP
+        distils its base layers toward the consensus, with a proximal term
+        (mu/2)||theta - theta_before||^2 that keeps it close to its own model."""
+        N, M = self.n, s_ref.shape[0]
+        sr = s_ref.unsqueeze(0).expand(N, -1, -1)
         with torch.no_grad():
-            for actor in actors.values():
-                actor.eval()
-                # Run stochastically to get SOFT channel distributions
-                _, _, l_ch, l_bw = actor(s_ref, deterministic=False)
-                # l_ch from gumbel-softmax is already a soft probability vector
-                local_ch_logits.append(l_ch.detach())
-                local_bw_list.append(l_bw.detach())
-                actor.train()
+            ch, bw, pw = actor.soft_outputs(sr)
+            t_ch = torch.stack([ch[idx].mean(dim=0) for idx in self.zones]).mean(dim=0)
+            t_bw = torch.stack([bw[idx].mean(dim=0) for idx in self.zones]).mean(dim=0)
+            t_pw = torch.stack([pw[idx].mean(dim=0) for idx in self.zones]).mean(dim=0)
+        payload = M * (self.n_channels + 3 + 1) * BYTES
+        self.meter.inter_zone += 2 * len(self.zones) * payload
+        self.meter.intra_zone += 2 * N * payload
+        base = actor.base_parameters()
+        before = [p.detach().clone() for p in base]
+        opt = torch.optim.Adam(base, lr=self.lr_kd)
+        for _ in range(self.kd_steps):
+            c, b, w = actor.soft_outputs(sr)
+            kl = F.kl_div(torch.log(c + 1e-8), t_ch.unsqueeze(0).expand_as(c), reduction="none").sum(-1).mean(dim=1)
+            mse = (b - t_bw.unsqueeze(0)).pow(2).sum(-1).mean(dim=1) + (w - t_pw.unsqueeze(0)).pow(2).sum(-1).mean(dim=1)
+            prox = sum((p - q).pow(2).flatten(1).sum(dim=1) for p, q in zip(base, before))
+            loss = (kl + mse + 0.5 * self.mu * prox).sum()
+            grads = torch.autograd.grad(loss, base)
+            for p, g in zip(base, grads):
+                p.grad = g
+            opt.step()
+        for p in base:
+            p.grad = None
+        self._snapshot(actor)
 
-        for _ in range(5):  # few KD steps
-            optimizer.zero_grad()
-            kd_loss = torch.tensor(0.0, device=self.device)
+    def ship_reference_set(self, s_ref: torch.Tensor) -> None:
+        self.meter.reference_set += len(self.zones) * s_ref.numel() * BYTES
 
-            # Student forward (with gradients) — stochastic soft distributions
-            _, _, g_ch_soft, g_bw_grad = global_actor(s_ref, deterministic=False)
-            # g_ch_soft is a soft probability vector from gumbel-softmax
-            g_log_probs = torch.log(g_ch_soft + 1e-8)  # log of student probs
-
-            for l_ch, l_bw in zip(local_ch_logits, local_bw_list):
-                # KL(teacher || student) = Σ teacher * log(teacher / student)
-                ch_kl = F.kl_div(
-                    g_log_probs,          # student log-probs
-                    l_ch,                  # teacher probs (target)
-                    reduction="batchmean",
-                    log_target=False,
-                )
-                bw_mse = F.mse_loss(g_bw_grad, l_bw)
-                kd_loss = kd_loss + ch_kl + bw_mse
-
-            kd_loss = kd_loss / len(actors)
-            kd_loss.backward()
-            optimizer.step()
-
-        return {k: v.clone() for k, v in global_actor.base.state_dict().items()}
-
-    def update_reference_states(
-        self, replay_buffers: dict, state_dim: int
-    ) -> None:
-        """Generate reference states via k-means clustering of replay buffer states."""
-        all_states = []
-        for buf in replay_buffers.values():
-            states = buf.sample_states(min(self.s_ref_size, len(buf)))
-            if states is not None:
-                all_states.append(states)
-
-        if not all_states:
-            return
-
-        all_states = torch.cat(all_states, dim=0)
-
-        # Simple uniform subsampling as approximation to k-means
-        if all_states.size(0) > self.s_ref_size:
-            indices = torch.randperm(all_states.size(0))[: self.s_ref_size]
-            self.s_ref = all_states[indices].to(self.device)
-        else:
-            self.s_ref = all_states.to(self.device)
-
-    def compute_fedprox_loss(
-        self, actor: nn.Module
-    ) -> torch.Tensor:
-        """Compute FedProx proximal term: μ/2 · ||θ - θ_global||²."""
-        if self.global_base_state is None:
-            return torch.tensor(0.0, device=self.device)
-
-        prox_loss = torch.tensor(0.0, device=self.device)
-        for (name, param), (_, global_param) in zip(
-            actor.base.named_parameters(),
-            self.global_base_state.items(),
-        ):
-            global_param = global_param.to(self.device)
-            prox_loss += (param - global_param).pow(2).sum()
-
-        return (self.fedprox_mu / 2) * prox_loss
+    # -- local proximal regulariser -------------------------------------------------
+    def prox_loss(self, actor) -> torch.Tensor:
+        """sum over APs of (mu/2)||theta_i - anchor||^2 (zero until the first round)."""
+        if not self.uses_prox or self.anchor is None:
+            return torch.zeros((), device=self.device)
+        return 0.5 * self.mu * sum((p - a).pow(2).sum() for p, a in zip(actor.base_parameters(), self.anchor))

@@ -1,0 +1,369 @@
+[
+{
+"tag": "main",
+"method": "ssf",
+"seed": 0
+},
+{
+"tag": "main",
+"method": "persist",
+"seed": 0
+},
+{
+"tag": "main",
+"method": "a1_nojoint",
+"seed": 0
+},
+{
+"tag": "main",
+"method": "a3_noemb",
+"seed": 0
+},
+{
+"tag": "main",
+"method": "lstm_drl",
+"seed": 0
+},
+{
+"tag": "main",
+"method": "llf",
+"seed": 1
+},
+{
+"tag": "main",
+"method": "full",
+"seed": 1
+},
+{
+"tag": "main",
+"method": "a2_nosched",
+"seed": 1
+},
+{
+"tag": "main",
+"method": "fedddpg",
+"seed": 1
+},
+{
+"tag": "main",
+"method": "ssf",
+"seed": 2
+},
+{
+"tag": "main",
+"method": "persist",
+"seed": 2
+},
+{
+"tag": "main",
+"method": "a1_nojoint",
+"seed": 2
+},
+{
+"tag": "main",
+"method": "a3_noemb",
+"seed": 2
+},
+{
+"tag": "main",
+"method": "lstm_drl",
+"seed": 2
+},
+{
+"tag": "main",
+"method": "flat",
+"seed": 0
+},
+{
+"tag": "main",
+"method": "a5_hieravg",
+"seed": 0
+},
+{
+"tag": "main",
+"method": "iso",
+"seed": 1
+},
+{
+"tag": "main",
+"method": "a4_zone",
+"seed": 1
+},
+{
+"tag": "main",
+"method": "central",
+"seed": 1
+},
+{
+"tag": "nomac",
+"method": "fedddpg",
+"seed": 0,
+"args": [
+"--train-no-mac"
+]
+},
+{
+"tag": "nomac",
+"method": "full",
+"seed": 1,
+"args": [
+"--train-no-mac"
+]
+},
+{
+"tag": "out0",
+"method": "full",
+"seed": 1,
+"args": [
+"--train-outage",
+"0"
+]
+},
+{
+"tag": "w1",
+"method": "fedddpg",
+"seed": 0,
+"args": [
+"--reward-weights",
+0.25,
+0.25,
+0.25,
+0.25
+]
+},
+{
+"tag": "w2",
+"method": "fedddpg",
+"seed": 0,
+"args": [
+"--reward-weights",
+0.55,
+0.15,
+0.2,
+0.1
+]
+},
+{
+"tag": "w3",
+"method": "fedddpg",
+"seed": 0,
+"args": [
+"--reward-weights",
+0.2,
+0.5,
+0.2,
+0.1
+]
+},
+{
+"tag": "main",
+"method": "llf",
+"seed": 3
+},
+{
+"tag": "main",
+"method": "full",
+"seed": 3
+},
+{
+"tag": "main",
+"method": "fedddpg",
+"seed": 3
+},
+{
+"tag": "main",
+"method": "llf",
+"seed": 4
+},
+{
+"tag": "main",
+"method": "full",
+"seed": 4
+},
+{
+"tag": "main",
+"method": "fedddpg",
+"seed": 4
+},
+{
+"tag": "main",
+"method": "llf",
+"seed": 0
+},
+{
+"tag": "main",
+"method": "full",
+"seed": 0
+},
+{
+"tag": "main",
+"method": "a2_nosched",
+"seed": 0
+},
+{
+"tag": "main",
+"method": "fedddpg",
+"seed": 0
+},
+{
+"tag": "main",
+"method": "ssf",
+"seed": 1
+},
+{
+"tag": "main",
+"method": "persist",
+"seed": 1
+},
+{
+"tag": "main",
+"method": "a1_nojoint",
+"seed": 1
+},
+{
+"tag": "main",
+"method": "a3_noemb",
+"seed": 1
+},
+{
+"tag": "main",
+"method": "lstm_drl",
+"seed": 1
+},
+{
+"tag": "main",
+"method": "llf",
+"seed": 2
+},
+{
+"tag": "main",
+"method": "full",
+"seed": 2
+},
+{
+"tag": "main",
+"method": "a2_nosched",
+"seed": 2
+},
+{
+"tag": "main",
+"method": "fedddpg",
+"seed": 2
+},
+{
+"tag": "main",
+"method": "iso",
+"seed": 0
+},
+{
+"tag": "main",
+"method": "a4_zone",
+"seed": 0
+},
+{
+"tag": "main",
+"method": "central",
+"seed": 0
+},
+{
+"tag": "main",
+"method": "flat",
+"seed": 1
+},
+{
+"tag": "main",
+"method": "a5_hieravg",
+"seed": 1
+},
+{
+"tag": "nomac",
+"method": "full",
+"seed": 0,
+"args": [
+"--train-no-mac"
+]
+},
+{
+"tag": "out0",
+"method": "full",
+"seed": 0,
+"args": [
+"--train-outage",
+"0"
+]
+},
+{
+"tag": "nomac",
+"method": "fedddpg",
+"seed": 1,
+"args": [
+"--train-no-mac"
+]
+},
+{
+"tag": "w1",
+"method": "full",
+"seed": 0,
+"args": [
+"--reward-weights",
+0.25,
+0.25,
+0.25,
+0.25
+]
+},
+{
+"tag": "w2",
+"method": "full",
+"seed": 0,
+"args": [
+"--reward-weights",
+0.55,
+0.15,
+0.2,
+0.1
+]
+},
+{
+"tag": "w3",
+"method": "full",
+"seed": 0,
+"args": [
+"--reward-weights",
+0.2,
+0.5,
+0.2,
+0.1
+]
+},
+{
+"tag": "main",
+"method": "ssf",
+"seed": 3
+},
+{
+"tag": "main",
+"method": "persist",
+"seed": 3
+},
+{
+"tag": "main",
+"method": "a1_nojoint",
+"seed": 3
+},
+{
+"tag": "main",
+"method": "ssf",
+"seed": 4
+},
+{
+"tag": "main",
+"method": "persist",
+"seed": 4
+},
+{
+"tag": "main",
+"method": "a1_nojoint",
+"seed": 4
+}
+]

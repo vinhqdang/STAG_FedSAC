@@ -1,3 +1,3 @@
 from .stgcat import STGCAT
-from .graph_sac import SACActorNetwork, SACCriticNetwork, PersonalizedSACActor
-from .hierfed_kd import HierFedKD
+from .graph_sac import BatchedActor, BatchedCritic
+from .hierfed_kd import Federation, CommMeter

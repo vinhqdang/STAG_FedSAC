@@ -1,64 +1,46 @@
 """
-Replay Buffer — Per-AP prioritized experience replay.
+Batched replay buffer: one independent FIFO buffer per AP, stored as stacked
+tensors on the compute device. States are kept in float16 to bound memory.
 """
+from __future__ import annotations
+
 import torch
-import numpy as np
 
 
-class ReplayBuffer:
-    """Simple per-AP experience replay buffer with uniform sampling."""
-
-    def __init__(self, capacity: int, state_dim: int, action_dim: int, device: torch.device):
-        self.capacity = capacity
-        self.device = device
+class BatchedReplayBuffer:
+    def __init__(self, n_agents: int, capacity: int, state_dim: int, action_dim: int,
+                 device: torch.device):
+        self.n, self.cap, self.device = n_agents, capacity, device
+        self.s = torch.zeros(n_agents, capacity, state_dim, dtype=torch.float16, device=device)
+        self.s2 = torch.zeros(n_agents, capacity, state_dim, dtype=torch.float16, device=device)
+        self.a = torch.zeros(n_agents, capacity, action_dim, device=device)
+        self.r = torch.zeros(n_agents, capacity, 1, device=device)
+        self.d = torch.zeros(n_agents, capacity, 1, device=device)
         self.ptr = 0
         self.size = 0
-
-        # Pre-allocate tensors
-        self.states = torch.zeros(capacity, state_dim, dtype=torch.float32)
-        self.actions = torch.zeros(capacity, action_dim, dtype=torch.float32)
-        self.rewards = torch.zeros(capacity, 1, dtype=torch.float32)
-        self.next_states = torch.zeros(capacity, state_dim, dtype=torch.float32)
-        self.dones = torch.zeros(capacity, 1, dtype=torch.float32)
-
-        # Additional fields for joint training
-        self.h_obs = None  # local observations [F]
-        self.qos_obs = None  # QoS fractions [3]
-        self.sched_obs = None  # schedule features [D_s]
-
-    def store(
-        self,
-        state: torch.Tensor,
-        action: torch.Tensor,
-        reward: float,
-        next_state: torch.Tensor,
-        done: bool,
-    ) -> None:
-        self.states[self.ptr] = state.detach().cpu()
-        self.actions[self.ptr] = action.detach().cpu() if isinstance(action, torch.Tensor) else torch.tensor(action, dtype=torch.float32)
-        self.rewards[self.ptr, 0] = float(reward)
-        self.next_states[self.ptr] = next_state.detach().cpu()
-        self.dones[self.ptr, 0] = float(done)
-        self.ptr = (self.ptr + 1) % self.capacity
-        self.size = min(self.size + 1, self.capacity)
-
-    def sample(self, batch_size: int) -> tuple:
-        indices = np.random.randint(0, self.size, size=batch_size)
-        return (
-            self.states[indices].to(self.device),
-            self.actions[indices].to(self.device),
-            self.rewards[indices].to(self.device),
-            self.next_states[indices].to(self.device),
-            self.dones[indices].to(self.device),
-        )
-
-    def sample_states(self, n: int) -> torch.Tensor | None:
-        """Sample n states for reference state generation."""
-        if self.size == 0:
-            return None
-        n = min(n, self.size)
-        indices = np.random.randint(0, self.size, size=n)
-        return self.states[indices]
+        self._ar = torch.arange(n_agents, device=device).unsqueeze(1)
 
     def __len__(self) -> int:
         return self.size
+
+    def add(self, s, a, r, s2, d) -> None:
+        """s,s2: [N,S]; a: [N,A]; r: [N]; d: float."""
+        i = self.ptr
+        self.s[:, i] = s.to(torch.float16)
+        self.s2[:, i] = s2.to(torch.float16)
+        self.a[:, i] = a
+        self.r[:, i, 0] = r
+        self.d[:, i, 0] = float(d)
+        self.ptr = (self.ptr + 1) % self.cap
+        self.size = min(self.size + 1, self.cap)
+
+    def sample(self, batch: int, pooled: bool = False):
+        """Returns tensors of shape [N, B, .]. ``pooled``: each agent draws from
+        the union of all agents' experience (centralised comparator)."""
+        t = torch.randint(0, self.size, (self.n, batch), device=self.device)
+        who = (torch.randint(0, self.n, (self.n, batch), device=self.device) if pooled else self._ar.expand(-1, batch))
+        return (self.s[who, t].float(), self.a[who, t], self.r[who, t], self.s2[who, t].float(), self.d[who, t])
+
+    def sample_states(self, m: int) -> torch.Tensor:
+        t = torch.randint(0, self.size, (m,), device=self.device)
+        return self.s[:, t].float()

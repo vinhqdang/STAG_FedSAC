@@ -1,95 +1,23 @@
 % ========================================================
-% 2related_work.tex
+% 2related_work.tex  (structure of the submitted version; absolute novelty claims hedged)
 % ========================================================
-\section{Related Work}
+\section{Related Works}
 \label{sec:related}
 
-\subsection{Spatio-Temporal Load Prediction for Wireless Networks}
+\subsection{Spatio-Temporal Prediction for Wireless and Wi-Fi Networks}
+Accurate prediction of access-point (AP) load and wireless traffic is a prerequisite for proactive resource management, and spatio-temporal deep learning has become the dominant approach. Shaabanzadeh and S\'anchez-Gonz\'alez~\cite{shaabanzadeh2024} evaluate a broad family of architectures (CNN, GRU, LSTM and Transformer) for spatio-temporal Wi-Fi load prediction at the individual AP level on real campus measurements spanning 100 APs over three months, fusing spatial neighbour information only when inter-AP correlations are statistically significant.
 
-Spatio-temporal prediction of network traffic has evolved from standalone LSTM
-models~\cite{Shaabanzadeh2024} through graph-enhanced
-architectures~\cite{Jin2024} to multi-grained hybrid
-approaches~\cite{Liu2024}. Shaabanzadeh \textit{et al.}~\cite{Shaabanzadeh2024}
-showed that Transformers outperform CNN and LSTM on campus WiFi traces with
-100+ APs, while GraFSTNet~\cite{GraFSTNet2025} introduced dual-branch
-spatial-temporal fusion for cellular traffic. However, none of these works
-exploit structured event metadata (schedules, timetables) as cross-attention
-features, limiting performance during sudden, schedule-driven load transitions.
-Salami \textit{et al.}~\cite{Salami2024} explored federated LSTM with
-knowledge distillation for per-AP prediction but omit spatial graph context
-and schedule awareness. \textbf{STAG-FedSAC's ST-GCAT is the first predictor
-to bring schedule features into a graph cross-attention mechanism.}
+At cellular scale, Cai et al.~\cite{cai2024} propose DBSTGNN-Att, a dual-branch spatio-temporal graph neural network with self-attention that fuses location and point-of-interest features through an attributed $k$-nearest-neighbour graph, with superior short-, mid- and long-term predictions on the Milan Telecom Italia dataset. Lin et al.~\cite{lin2024} unify normal, target-alarm and neighbour-alarm network states by transfer learning over spatio-temporal graph neural networks for multi-scenario cellular KPI prediction. Xiao et al.~\cite{xiao2025} combine a diffusion convolutional GRU with multi-head attention to capture spatial diffusion, temporal periodicity and external influence in cellular traffic.
 
-\subsection{Deep Reinforcement Learning for WiFi Resource Allocation}
+The work closest in spirit to ours is STECA-GCN~\cite{liu2024stgnn}, which incorporates an event dimension via cross-attention in a spatio-temporal graph model and feeds the output into a DDPG-based load-balancing agent; its event features are, however, coarse binary workday/holiday labels. Among the works we reviewed, we did not find one that uses structured transit timetable data (arrival and departure times and passenger counts) as cross-attention context for Wi-Fi AP load prediction; this is the setting of our ST-GCAT predictor.
 
-DDPG-based control of multi-AP dense WiFi deployments was studied by
-Zhang \textit{et al.}~\cite{Zhang2024}, who demonstrated cooperative access
-control benefits compared with static association. D3PG~\cite{Liu2024DRL}
-replaces DDPG with a diffusion policy for smoother action spaces.
-Szott \textit{et al.}~\cite{Szott2024} applied DQN and DDPG to
-IEEE~802.11ax contention window optimisation. SAC has emerged as superior
-for non-stationary wireless environments due to entropy
-regularisation~\cite{SACvsRIS2024}, and was adopted for NB-IoT
-fairness-energy trade-offs~\cite{SACNBIoT2024}. These prior works, however,
-treat power, channel, and bandwidth as separate or flat action spaces and do
-not augment the state with spatio-temporal graph embeddings from a predictor.
+\subsection{Deep Reinforcement Learning for Wireless Resource Allocation}
+Deep reinforcement learning has been widely applied to continuous resource-management problems in wireless networks. Yang et al.~\cite{yang2024aro} identify a discounted-reward mismatch in prior wireless RL formulations and propose ARO-SAC, an average-reward Soft Actor-Critic variant for RAN slicing, with a 15\% gain over conventional SAC on the NetworkGym simulator. For energy efficiency in RIS-assisted UAV systems, Adhikari et al.~\cite{adhikari2024} jointly optimise phase shifts and 3D trajectory with twin delayed DDPG, benchmarking against SAC, DDPG and double DQN. Wang et al.~\cite{wang2024} address 6G mmWave massive MIMO-NOMA with a hybrid DRL framework that pairs dueling DQN for discrete subchannel allocation with DDPG for continuous power allocation. Pi and Ren~\cite{pi2024} develop HMSAC, a heterogeneous-action multi-agent SAC with an embedded attention mechanism that jointly optimises channels, power levels and bandwidths for NOMA uplink in vehicular networks. Qi et al.~\cite{qi2024} formulate a multi-QoS DRL problem for RIS-aided IoV networks that minimises age of information under vehicle-to-vehicle reliability constraints. In the works we reviewed, the environment state is a scalar or flat vector (channel gains, per-slice metrics, positions); we did not find a work that builds the RL state from the dense, spatially structured embedding of a spatio-temporal predictor, which is what our Graph-SAC state does.
 
-\subsection{Prediction--Control Coupling in Wireless Optimisation}
+\subsection{Federated Learning for Wireless Networks}
+Azimi-Abarghouyi and Fodor~\cite{azimi2024} introduce scalable hierarchical over-the-air federated learning with a two-level cluster/global aggregation scheme and convergence bounds for heterogeneous wireless topologies. Pervej et al.~\cite{pervej2024} address bandwidth scarcity and device heterogeneity in hierarchical FL by adaptive model pruning during inter-level aggregation. At the aggregation-mechanism level, Shao et al.~\cite{shao2024} propose Selective-FD, which selectively shares soft-label knowledge without a well-trained teacher, and Pang et al.~\cite{pang2024} discuss how federated learning and knowledge distillation can be combined in wireless systems. Liang et al.~\cite{liang2025} jointly optimise communication energy and training latency in over-the-air FL with a DRL algorithm, and Wu et al.~\cite{wu2024} study age-based client selection and resource allocation for FL over NOMA networks. Li et al.~\cite{li2025kd} use knowledge distillation for asynchronous federated reinforcement learning in IoT. The hierarchical schemes above average or prune parameters, Selective-FD is formulated for classification, and the FL-wireless co-design works use flat FedAvg-style aggregation. We did not find a scheme that combines zone-level averaging, inter-zone distillation of \emph{policy outputs} on a public reference set and Wi-Fi resource optimisation as the target application; we do not claim that none exists.
 
-Integrating traffic forecasting with DRL has been studied in O-RAN
-slicing~\cite{Lotfi2024} and DQN with lookahead
-states~\cite{CNNLSTMDQN2025}. A key finding~\cite{ForecastDRL2024} is
-that a frozen predictor used as state augmentation degrades with prediction
-errors. STAG-FedSAC addresses this by jointly training predictor and policy,
-creating a feedback loop absent in prior work.
+\subsection{Graph Neural Networks in Networking}
+Dai et al.~\cite{dai2024} survey graph-based resource management in wireless networks (GCN, GAT, GraphSAGE, MPNN) and identify GNN-enabled DRL as a major open direction. Liu et al.~\cite{liu2024gnn} integrate graph attention with multi-agent RL to address partial observability and non-stationarity. Ji et al.~\cite{ji2024} combine GraphSAGE with DRL so that low-dimensional graph embeddings serve directly as the distributed agents' state for channel selection and power control in C-V2X. Marwani and Kaddoum~\cite{marwani2024} model multi-link interference as a graph and train a GNN to solve power control and spectrum allocation jointly, and Li et al.~\cite{li2024hetgnn} use a heterogeneous GNN with distinct node and edge types for cell-free massive MIMO power allocation.
 
-\subsection{Federated Deep Reinforcement Learning}
-
-Federated DRL has been applied to contention window
-optimisation~\cite{Tu2025}, vehicular
-networks~\cite{AFL2025}, and energy-aware IoT
-scheduling~\cite{PerFedSAC2025}. E-FRL~\cite{Du2024} is the most relevant
-prior work: it applies federated DDPG to dense WiFi channel access with
-exponential weighted aggregation. STAG-FedSAC extends E-FRL by adding a
-two-level hierarchy, schedule-conditioned prediction, joint training, and
-knowledge distillation compression. Tu \textit{et al.}~\cite{Tu2025} proposed
-multi-agent DDPG with federated parameter sharing but without prediction-to-control
-coupling or personalised local heads. KD-AFRL~\cite{KDAFRL2025} uses KD for
-communication efficiency in IoT but without hierarchical zone-level aggregation.
-
-\subsection{Fairness in Multi-AP Wireless Networks}
-
-Jain's Fairness Index (JFI) is a standard metric for evaluating multi-user
-equity~\cite{Gurewitz2024}. Primal-dual (Lagrangian) methods have been
-applied to enforce capacity constraints in DDPG-based network
-slicing~\cite{PDDPG2024}, and fairness-constrained RL has been formalised
-through multi-agent MDP frameworks~\cite{FairMDP2024}. STAG-FedSAC adopts
-Lagrangian multipliers for capacity constraints while directly incorporating
-JFI into its reward function with per-class QoS thresholds.
-
-\subsection{Summary and Positioning}
-
-Table~\ref{tab:related} summarises the most relevant prior works.
-STAG-FedSAC is unique in combining all five desiderata---schedule-aware
-prediction, graph-embedded DRL state, joint training, hierarchical
-federation, and QoS-differentiated fairness---in a single framework.
-
-\begin{table}[htbp]
-\centering
-\caption{Comparison of STAG-FedSAC with related work.}
-\label{tab:related}
-\small
-\begin{tabular}{lccccc}
-\toprule
-\textbf{Method} & \textbf{Schedule} & \textbf{Graph} & \textbf{Joint} & \textbf{Hier.\ Fed.} & \textbf{QoS Fair.} \\
-\midrule
-Shaabanzadeh~\cite{Shaabanzadeh2024} & \checkmark & $\times$ & $\times$ & $\times$ & $\times$ \\
-Zhang (DDPG)~\cite{Zhang2024}        & $\times$ & $\times$ & $\times$ & $\times$ & $\times$ \\
-E-FRL~\cite{Du2024}                  & $\times$ & $\times$ & $\times$ & $\times$ & $\times$ \\
-Salami (FedLSTM)~\cite{Salami2024}   & $\times$ & $\times$ & $\times$ & $\times$ & $\times$ \\
-Lotfi (O-RAN)~\cite{Lotfi2024}       & $\times$ & $\times$ & Partial & $\times$ & $\times$ \\
-PerFedSAC~\cite{PerFedSAC2025}       & $\times$ & $\times$ & $\times$ & $\times$ & \checkmark \\
-\textbf{STAG-FedSAC (ours)}          & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark \\
-\bottomrule
-\end{tabular}
-\end{table}
+Ji et al.~\cite{ji2024} is architecturally the closest to ours, since GNN embeddings are the RL state; it uses a static interference-topology convolution rather than a forecast-conditioned spatio-temporal embedding, employs DQN rather than SAC, and has no federated training. We did not find prior work that passes the output of a schedule-conditioned graph forecaster into the state of a SAC policy.

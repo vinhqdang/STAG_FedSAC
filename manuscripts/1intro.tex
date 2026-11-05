@@ -4,89 +4,35 @@
 \section{Introduction}
 \label{sec:intro}
 
-Modern transit venues---international airports, high-speed railway stations,
-and intercity bus terminals---are among the most WiFi-demanding environments
-on earth. At peak hours, a single departure gate lounge can simultaneously
-host hundreds of users streaming 4K video, conducting video calls, and uploading
-content, all sharing fewer than a dozen access points (APs)~\cite{Shaabanzadeh2024}.
-Unlike enterprise offices or university campuses, transit venues exhibit a
-distinctive pattern: congestion is \emph{predictable}. Departure and arrival
-schedules define when and where crowds will concentrate to a degree of temporal
-precision rarely available in other settings. Yet commercially deployed WiFi
-controllers remain fundamentally \emph{reactive}---they detect congestion only
-after users experience degraded service and respond with heuristic load
-balancing that ignores future schedule information entirely~\cite{Du2024}.
+Transit venues---airports, railway stations and bus terminals---are among the most demanding environments for WiFi. At peak hours a single departure lounge can host hundreds of users streaming video, making calls and uploading content over a handful of access points (APs)~\cite{kougioumtzidis2025}. Unlike enterprise offices or university campuses, transit venues have a feature that a controller can exploit: part of the congestion is \emph{announced in advance}. Departure and arrival timetables indicate when and where crowds will gather, with a temporal precision rarely available elsewhere. Commercial WLAN controllers, however, are largely \emph{reactive}: they detect congestion after users experience degraded service and respond with load-balancing heuristics that ignore future schedule information~\cite{du2024}.
 
-Four interrelated research gaps motivate this work:
+We study whether schedule information can be turned into better radio resource decisions, and we organise the work around four gaps:
 
 \begin{enumerate}
-  \item \textbf{Schedule unawareness}: Existing predictors treat AP load as a
-  purely historical time series, discarding transit schedule metadata that
-  could provide minutes-to-hours of lead time before a surge~\cite{Salami2024}.
-
-  \item \textbf{Reactive congestion control}: Rule-based controllers (Strongest
-  Signal First, Least Loaded First) and even DRL agents trained without
-  lookahead cannot pre-configure power and bandwidth before users arrive at
-  gate zones~\cite{Zhang2024}.
-
-  \item \textbf{Unfair bandwidth distribution}: Multi-class
-  QoS---VoIP requires low latency, streaming requires high throughput, best-effort
-  tolerates delays---demands a hybrid action space that simultaneously controls
-  power, channel, and class-level bandwidth allocation, which simple DDPG
-  continuous actions cannot represent efficiently~\cite{Szott2024}.
-
-  \item \textbf{Poor multi-AP coordination}: Centralised optimisation violates
-  user privacy; isolated per-AP agents ignore spatial interference. Federated
-  learning is promising, but single-level FedAvg loses zone-level
-  heterogeneity~\cite{Du2024}.
+  \item \textbf{Schedule unawareness}: load predictors treat AP load as a purely historical time series and discard timetable metadata that provides lead time before a surge~\cite{pang2024}.
+  \item \textbf{Reactive control}: rule-based controllers (strongest signal first, least loaded first) and DRL agents trained without look-ahead cannot pre-configure power and airtime before users arrive~\cite{alauthman2025}.
+  \item \textbf{Multi-class QoS}: VoIP needs low latency, video needs throughput and best-effort tolerates delay; this calls for a hybrid action (power, channel, per-class airtime) that plain continuous DDPG actions represent awkwardly~\cite{yu2026}.
+  \item \textbf{Distributed learning across administrative domains}: in a large venue, the zones can belong to different operators who do not pool per-user data, while isolated per-AP learners ignore what neighbouring APs have learned. Single-level federated averaging ignores zone structure~\cite{du2024}.
 \end{enumerate}
 
-We address all four gaps simultaneously with \textbf{STAG-FedSAC}: a unified
-framework that couples a Schedule-Conditioned Spatio-Temporal Graph Attention
-Transformer (ST-GCAT) predictor with a per-AP Soft Actor-Critic (SAC) agent
-trained through a bidirectional joint gradient mechanism, coordinated by a
-two-level Hierarchical Federated Aggregation with Knowledge Distillation
-(HierFed-KD). Figure~\ref{fig:architecture} illustrates the system overview.
+We propose \textbf{STAG-FedSAC}, a framework that combines (i)~a schedule-conditioned spatio-temporal graph attention Transformer (ST-GCAT) that forecasts AP load 30~minutes ahead, (ii)~per-AP Soft Actor-Critic (SAC) agents whose state includes the ST-GCAT embedding, trained with an additional gradient path from the actors into the predictor, and (iii)~a two-level federation (HierFed-KD) in which APs of a zone average their base models and zones exchange soft policy outputs on a public reference set instead of weights. Figure~\ref{fig:architecture} gives an overview and Section~\ref{sec:roles} defines the roles of the entities involved.
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=\linewidth]{fig7_architecture.png}
-  \caption{STAG-FedSAC system overview. Module 1 (ST-GCAT) predicts future
-  AP loads using historical observations, the interference graph, and transit
-  schedule features. Its graph embeddings $\mathbf{Z}_\mathrm{fused}$ enrich
-  the SAC state (Module 2). Module 3 (HierFed-KD) coordinates the distributed
-  agents without sharing raw data. The bidirectional gradient bridge
-  ($\eta \cdot \mathcal{L}_\mathrm{actor} \to \phi$) is the core novelty.}
+  \caption{STAG-FedSAC overview. Module 1 (ST-GCAT) forecasts AP loads from the history of AP counters, the interference graph and the timetable, and produces embeddings $\mathbf{Z}_\mathrm{fused}$. Module 2 (per-AP SAC agents) uses them in its state and chooses power, channel and per-class airtime; a gradient path ($\eta\cdot\mathcal{L}_\mathrm{actor}\to\phi$) lets the control objective shape the predictor. Module 3 (HierFed-KD) federates the agents: model averaging inside a zone, distillation on a public reference set between zones. Per-user data and replay buffers stay at the AP.}
   \label{fig:architecture}
 \end{figure}
 
-The \textbf{novel contributions} of this paper are:
-
+\paragraph{Contributions.} To the best of our knowledge, the combination below has not been reported for WiFi resource management; we evaluate each element separately with ablations and say where the evidence is weak.
 \begin{itemize}
-  \item \textbf{ST-GCAT (Contribution 1)}: The first graph cross-attention
-  Transformer where transit schedule tensors $\mathbf{S}^{(t:t+\Delta)}$
-  serve as cross-attention features to a spatial Graph Attention Network (GAT)
-  + temporal Transformer, enabling prediction of AP load surges up to
-  $\Delta = 6$ timesteps (30 min) ahead.
-
-  \item \textbf{Graph-embedded SAC state (Contribution 2)}: Rather than
-  appending a scalar load forecast, we concatenate the full ST-GCAT embedding
-  $\mathbf{Z}_\mathrm{fused} \in \Rset^{N \times \Delta \times d_h}$ to the SAC
-  state, preserving spatial structure for downstream policy learning.
-
-  \item \textbf{Bidirectional joint training (Contribution 3)}: The predictor
-  loss is augmented with the actor loss:
-  $\mathcal{L}_\mathrm{pred} = \mathrm{MSE}(\hat{L}, L) + \eta \mathcal{L}_\mathrm{actor}$,
-  so that policy gradients back-propagate into ST-GCAT, aligning representations
-  with control objectives.
-
-  \item \textbf{HierFed-KD (Contribution 4)}: A two-level (zone $\to$ global)
-  federation protocol using quality-weighted FedAvg at zone level,
-  FedProx at global level, and knowledge distillation for $11.5\times$
-  communication compression.
+  \item \textbf{Schedule-conditioned forecasting} (ST-GCAT): timetable features enter a graph-attention and Transformer predictor as cross-attention keys and values, giving horizon-specific forecasts up to $\Delta=6$ intervals ahead.
+  \item \textbf{Graph-embedded SAC state}: the agent receives the full embedding $\mathbf{Z}_\mathrm{fused}\in\mathbb{R}^{N\times\Delta\times d_h}$ instead of a scalar forecast.
+  \item \textbf{Joint training} of predictor and policy: the predictor loss is augmented with a (scale-normalised) actor loss, $\mathcal{L}_\mathrm{pred}=\mathrm{MSE}+\eta\,\tilde{\mathcal{L}}_\mathrm{actor}$.
+  \item \textbf{HierFed-KD}: zone-level quality-weighted averaging plus inter-zone proximal distillation on a public reference set, with the communication volume measured byte by byte.
+  \item \textbf{A more realistic evaluation} than a Shannon-capacity simulator: MAC contention (Bianchi model), channel-switching cost and an EDCA-style airtime mapping, with robustness tests for each (Section~\ref{sec:exp}).
 \end{itemize}
 
-The remainder of this paper is organised as follows. Section~\ref{sec:related}
-reviews related work. Section~\ref{sec:method} details the STAG-FedSAC
-framework. Section~\ref{sec:exp} presents experimental results.
-Section~\ref{sec:conclusion} concludes.
+The experiments are run in a simulator; no measured traces are used. We therefore claim improvements \emph{in simulation} only, and discuss in Section~\ref{sec:limits} what remains to be shown for a real deployment.
+
+The paper is organised as follows. Section~\ref{sec:related} reviews related work, Section~\ref{sec:method} describes the framework, Section~\ref{sec:exp} the experiments, and Section~\ref{sec:conclusion} concludes.

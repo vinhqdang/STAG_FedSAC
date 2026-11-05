@@ -25,50 +25,43 @@ class ScheduleGenerator:
         self.sigma = sigma
         self.zone_assignments = zone_assignments or {i: i % 3 for i in range(n_aps)}
 
-    def generate_schedule_tensor(
-        self,
-        current_step: int,
-        events: list[dict],
-    ) -> np.ndarray:
-        """Generate schedule feature tensor for all APs and future timesteps.
+    # Feature layout (D_s = 8); divide by NORM to obtain O(1) inputs.
+    #   0 departure surge   : sum_e n_pax * exp(-tau^2 / 2 sigma^2) over departure events in the AP zone
+    #   1 arrival surge     : same for arrival events
+    #   2 event window flag : 1 if an event of the zone lies within +-3 steps
+    #   3 time to departure : steps until the next departure event of the zone (0 if none)
+    #   4 time since arrival: steps since the last arrival event of the zone (0 if none)
+    #   5 occupancy forecast: min(1, (f0 + f1) / 300)
+    #   6 event count       : number of zone events within the next 6 steps
+    #   7 zone id           : zone index / 2
+    NORM = np.array([300.0, 300.0, 1.0, 12.0, 12.0, 1.0, 3.0, 1.0], dtype=np.float32)
 
-        Args:
-            current_step: current simulation step
-            events: list of schedule events with zone, time_offset, n_passengers, type
-
-        Returns:
-            S: [N_ap, delta, D_s] schedule feature tensor
-        """
-        S = np.zeros((self.n_aps, self.delta, self.d_schedule))
-
+    def generate_schedule_tensor(self, current_step: int, events: list[dict]) -> np.ndarray:
+        """Normalised schedule tensor S [N_ap, delta, D_s] for the next ``delta`` steps."""
+        zv = np.array([self.zone_assignments[i] for i in range(self.n_aps)])
+        S = np.zeros((self.n_aps, self.delta, self.d_schedule), dtype=np.float32)
+        S[:, :, 7] = (zv / 2.0)[:, None]
         for dt in range(self.delta):
-            future_step = current_step + dt + 1
-
-            for event in events:
-                tau = event["time_offset"] - future_step
+            fut = current_step + dt + 1
+            for ev in events:
+                mask = zv == ev["zone"]
+                tau = ev["time_offset"] - fut
                 surge = np.exp(-tau ** 2 / (2 * self.sigma ** 2))
-                zone = event["zone"]
-
-                for ap_id in range(self.n_aps):
-                    if self.zone_assignments[ap_id] == zone:
-                        if event["type"] == "departure":
-                            S[ap_id, dt, 0] += event["n_passengers"] * surge
-                            S[ap_id, dt, 3] = tau if tau > 0 else 0
-                        else:
-                            S[ap_id, dt, 1] += event["n_passengers"] * surge
-                            S[ap_id, dt, 4] = -tau if tau < 0 else 0
-
-                        S[ap_id, dt, 2] = 1.0 if abs(tau) < 3 else 0.0
-                        # Zone type one-hot
-                        z_idx = min(zone, 2)
-                        S[ap_id, dt, 5 + z_idx] = 1.0
-                        # Occupancy forecast
-                        S[ap_id, dt, 7] = min(
-                            1.0,
-                            S[ap_id, dt, 0] / 300 + S[ap_id, dt, 1] / 300,
-                        )
-
-        return S.astype(np.float32)
+                if ev["type"] == "departure":
+                    S[mask, dt, 0] += ev["n_passengers"] * surge
+                    if tau > 0:
+                        cur = S[mask, dt, 3]
+                        S[mask, dt, 3] = np.where(cur == 0, tau, np.minimum(cur, tau))
+                else:
+                    S[mask, dt, 1] += ev["n_passengers"] * surge
+                    if tau < 0:
+                        S[mask, dt, 4] = np.maximum(S[mask, dt, 4], -tau)
+                if abs(tau) < 3:
+                    S[mask, dt, 2] = 1.0
+                if 0 < ev["time_offset"] - current_step <= self.delta:
+                    S[mask, dt, 6] += 1.0
+            S[:, dt, 5] = np.minimum(1.0, S[:, dt, 0] / 300 + S[:, dt, 1] / 300)
+        return S / self.NORM
 
     def generate_random_events(
         self, episode_len: int, n_events: int = 5

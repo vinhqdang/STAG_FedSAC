@@ -214,5 +214,20 @@ data/waca/*.zip
 data/waca/WACA*/
 checkpoints/
 logs/
-results/
+results/*
+!results/raw/
+!results/oracle.json
+!results/summary.json
 *.pt
+
+# LaTeX build files
+manuscripts/*.aux
+manuscripts/*.out
+manuscripts/*.spl
+manuscripts/*.pdf
+manuscripts/*.bbl
+manuscripts/*.blg
+manuscripts/*.toc
+response/*.aux
+response/*.out
+response/*.log
