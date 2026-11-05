@@ -168,7 +168,7 @@ def main() -> None:
     pl = []
     for m in pred_methods:
         if m in main_runs and main_runs[m]:
-            pl.append(f"{NAMES[m]} & " + " & ".join(fmt(seed_values(main_runs[m], k).values(), d) for k, _, d in pm) + " \\\\")
+            pl.append(f"{ {"lstm_drl": "LSTM (temporal only)", "a2_nosched": "ST-GCAT, no schedule (A2)", "a1_nojoint": "ST-GCAT, $\\eta=0$ (A1)"}.get(m, NAMES[m]) } & " + " & ".join(fmt(seed_values(main_runs[m], k).values(), d) for k, _, d in pm) + " \\\\")
     write(os.path.join(args.out_tables, "prediction.tex"),
           "\\begin{tabular}{l" + "c" * len(pm) + "}\n\\toprule\nForecaster & " + " & ".join(n for _, n, _ in pm) +
           " \\\\\n\\midrule\n" + "\n".join(pl) + "\n\\bottomrule\n\\end{tabular}\n")
@@ -216,17 +216,19 @@ def main() -> None:
 
     # ---- Table: reward-weight sensitivity ----------------------------------------------------
     wl = []
-    wnames = {"w1": "Equal weights (0.25/0.25/0.25/0.25)", "w2": "Throughput-heavy (0.55/0.15/0.20/0.10)", "w3": "Latency-heavy (0.20/0.50/0.20/0.10)"}
-    for tag in ("w1", "w2", "w3"):
+    wnames = {"w1": "Equal weights (0.25/0.25/0.25/0.25)", "w2": "Throughput-heavy (0.55/0.15/0.20/0.10)", "w3": "Latency-heavy (0.20/0.50/0.20/0.10)",
+              "main": "Default (0.40/0.25/0.20/0.05)"}
+    for tag in ("main", "w1", "w2", "w3"):
         r = runs.get(tag, {})
-        if r.get("full") and r.get("fedddpg"):
-            d, _ = paired(r["full"], r["fedddpg"], "reward")
+        if tag == "main":
+            r = {m: {s_: rec for s_, rec in main_runs[m].items() if s_ == 0} for m in ("ssf", "fedddpg", "full") if m in main_runs}
+        if r.get("full") and r.get("fedddpg") and r.get("ssf"):
             wl.append(f"{wnames[tag]} & " + " & ".join(
-                f"{fmt(seed_values(r[m], k).values(), dd)}" for m in ("fedddpg", "full") for k, dd in (("reward", 3), ("lat", 0), ("jfi", 3))) + " \\\\")
+                f"{fmt(seed_values(r[m], k).values(), dd)}" for m in ("ssf", "fedddpg", "full") for k, dd in (("reward", 3), ("lat", 0), ("jfi", 3))) + " \\\\")
     if wl:
         write(os.path.join(args.out_tables, "weights.tex"),
-              "\\begin{tabular}{lcccccc}\n\\toprule\n & \\multicolumn{3}{c}{FedDDPG} & \\multicolumn{3}{c}{STAG-FedSAC} \\\\\n"
-              "\\cmidrule(lr){2-4}\\cmidrule(lr){5-7}\nWeights ($\\alpha/\\beta/\\gamma/\\delta$) & Reward & Lat. & JFI & Reward & Lat. & JFI \\\\\n\\midrule\n"
+              "\\begin{tabular}{lccccccccc}\n\\toprule\n & \\multicolumn{3}{c}{SSF} & \\multicolumn{3}{c}{FedDDPG} & \\multicolumn{3}{c}{STAG-FedSAC} \\\\\n"
+              "\\cmidrule(lr){2-4}\\cmidrule(lr){5-7}\\cmidrule(lr){8-10}\nWeights ($\\alpha/\\beta/\\gamma/\\delta$) & Reward & Lat. & JFI & Reward & Lat. & JFI & Reward & Lat. & JFI \\\\\n\\midrule\n"
               + "\n".join(wl) + "\n\\bottomrule\n\\end{tabular}\n")
 
     # ---- Table: weight of the joint gradient ------------------------------------------------------
@@ -260,7 +262,7 @@ def main() -> None:
         if main_runs.get(m):
             ax.axhline(np.mean(list(seed_values(main_runs[m], "reward").values())), color=col[m], ls=ls, lw=1.2, label=NAMES[m] + " (no learning)")
     ax.axvline(200, color="k", lw=0.6, ls=":")
-    ax.text(205, ax.get_ylim()[0], "end of random warm-up", fontsize=8, va="bottom")
+    ax.text(205, ax.get_ylim()[0], "end of warm-up", fontsize=8, va="bottom")
     ax.set_xlabel("Training episode"); ax.set_ylabel("Held-out reward (5 episodes)")
     ax.legend(fontsize=8, ncol=2); ax.grid(alpha=0.3)
     fig.savefig(os.path.join(args.out_figs, "fig_convergence.png")); plt.close(fig)

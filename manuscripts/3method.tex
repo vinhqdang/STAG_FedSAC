@@ -17,10 +17,36 @@ We consider a venue with $N$ access points (APs) grouped into $Z$ \emph{zones} (
   \item \textbf{Venue controller} (one per venue). Hosts the ST-GCAT predictor, which needs AP-level load counters of all APs and the timetable; it also coordinates the zones (Level~2) and serves the public reference set used for distillation.
 \end{itemize}
 
-\paragraph{Time and data flow.} Time advances in control intervals of 5 minutes. At the start of interval $t$, every AP reports its counters (Table~\ref{tab:obs}) to the venue controller; ST-GCAT turns the last $T=12$ intervals (one hour) of counters of all APs, the interference graph and the timetable of the next $\Delta=6$ intervals into one embedding per AP; each agent then selects its action, and the reward is computed from the counters of the interval that follows.
+\paragraph{Time and data flow} Time advances in control intervals of 5 minutes. At the start of interval $t$, every AP reports its counters (Table~\ref{tab:obs}) to the venue controller; ST-GCAT turns the last $T=12$ intervals (one hour) of counters of all APs, the interference graph and the timetable of the next $\Delta=6$ intervals into one embedding per AP; each agent then selects its action, and the reward is computed from the counters of the interval that follows.
 
-\paragraph{What is federated, and why.}
+\paragraph{What is federated, and why}
 Per-user data (association records, device identifiers, traffic mix, mobility traces) exist only to train the AP agents, and in a large venue the zones are frequently run by different parties (terminal operator, airline lounges, retail tenants) who cannot pool such data. Federated learning is therefore used to let agents benefit from each other's experience while \emph{transitions, per-user records and replay buffers never leave the AP}; only (parts of) model parameters or, at Level~2, soft policy outputs on a public reference set are exchanged. The predictor consumes AP-level aggregates only (counts and averages, no user identifiers), which are already collected by any WLAN controller. We want to be explicit about the scope of this protection: it is \emph{data minimisation}, not a formal privacy guarantee. We do not add differential privacy or secure aggregation, and exchanged parameters or outputs can still leak information about local data. Section~\ref{sec:exp-fed} quantifies what federation buys in learning performance and communication, by comparing it with isolated learners and with a (privacy-violating) pooled-experience learner.
+
+
+\begin{table}[htbp]
+\centering
+\caption{Main notation.}
+\label{tab:notation}
+\small
+\begin{tabular}{ll}
+\toprule
+\textbf{Symbol} & \textbf{Meaning} \\
+\midrule
+$N$, $Z$, $C$ & number of APs, zones, channels \\
+$T$, $\Delta$ & history length (12 intervals) and forecast horizon (6 intervals) \\
+$\mathbf{H}$, $\mathbf{S}$, $\mathbf{A}$ & AP history, schedule tensor, interference graph \\
+$L_i^t$, $\hat L_i^t$ & normalised load of AP $i$ and its forecast \\
+$\mathbf{Z}_{\mathrm{fused}}$, $d_h$ & ST-GCAT embedding and its width (128) \\
+$\mathbf{s}_i$, $\mathbf{a}_i=(p_i,c_i,\mathbf{w}_i)$ & state and action of AP $i$ (power, channel, airtime budget) \\
+$u_i$, $\lambda_i$ & airtime utilisation and Lagrange multiplier of AP $i$ \\
+$\alpha,\beta,\gamma,\delta,\delta_p$ & reward weights \\
+$\eta$, $\kappa$ & joint-gradient weight and embedding scale \\
+$\mu$, $T_{\mathrm{local}}$, $T_{\mathrm{global}}$ & proximal weight and the two federation periods \\
+$M$, $\mathcal{S}_{\mathrm{ref}}$ & size and set of public reference states \\
+$t_{\mathrm{sw}}$ & channel-switch outage \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{table}[htbp]
 \centering
@@ -64,9 +90,9 @@ Schedule $\mathbf{S}^{t:t+\Delta}$ & 8 features per AP and future interval deriv
 \subsection{Control Problem}
 \label{sec:action}
 
-\paragraph{Action.} At each interval AP $i$ chooses $\mathbf{a}_i^t=(p_i,c_i,\mathbf{w}_i)$: transmit power $p_i\in[P_{\min},P_{\max}]=[5,23]$~dBm, operating channel $c_i\in\{1,\dots,C\}$ ($C=11$ orthogonal 20~MHz channels), and an airtime budget $\mathbf{w}_i\in\Delta^3$ over the three QoS classes (VoIP, video, best-effort). How $c_i$ and $\mathbf{w}_i$ are realised on commodity hardware, and what they cost, is described in Section~\ref{sec:deploy}.
+\paragraph{Action} At each interval AP $i$ chooses $\mathbf{a}_i^t=(p_i,c_i,\mathbf{w}_i)$: transmit power $p_i\in[P_{\min},P_{\max}]=[5,23]$~dBm, operating channel $c_i\in\{1,\dots,C\}$ ($C=11$ orthogonal 20~MHz channels), and an airtime budget $\mathbf{w}_i\in\Delta^3$ over the three QoS classes (VoIP, video, best-effort). How $c_i$ and $\mathbf{w}_i$ are realised on commodity hardware, and what they cost, is described in Section~\ref{sec:deploy}.
 
-\paragraph{Reward.} The reward of AP $i$ is
+\paragraph{Reward} The reward of AP $i$ is
 \begin{equation}
   r_i^t=\alpha\, r^{\mathrm{tp}}_i+\beta\, r^{\mathrm{lat}}_i+\gamma\, r^{\mathrm{fair}}_i+\delta\, r^{\mathrm{qos}}_i+\delta_p\, b^{\mathrm{pred}}_i,
   \label{eq:reward}
@@ -81,7 +107,7 @@ with every term on a unit scale:
 \end{align*}
 The weights $\alpha=0.40$, $\beta=0.25$, $\gamma=0.20$, $\delta=0.05$, $\delta_p=0.10$ sum to one and encode an operator priority order (throughput, then latency, then fairness; the QoS-violation term is small because violations already lower the throughput and latency terms, and the prediction term is a small auxiliary shaping signal). They are a design choice, not the output of a derivation: we do not claim they are optimal, and Section~\ref{sec:exp-weights} reports how conclusions change under three other weightings. SAC is trained on the reward multiplied by a constant scale $R_{\mathrm{s}}=10$ that matches the reward magnitude to the entropy term; \emph{evaluation always uses the unscaled environment reward of Eq.~\eqref{eq:reward} without $b^{\mathrm{pred}}$}, so that methods without a predictor are scored identically.
 
-\paragraph{Constraint.} Let $\rho^{\mathrm{need}}_i=\sum_{u\in\mathcal{U}_i} d_u/R_u$ be the airtime AP $i$ needs to carry the offered rates $d_u$ at the PHY rates $R_u$ of its users, and $\rho^{\mathrm{avail}}_i$ the airtime it actually obtains (its share of the collision domain times the MAC efficiency, Section~\ref{sec:sim}). We require the \emph{airtime utilisation} $u_i^t=\rho^{\mathrm{need}}_i/\rho^{\mathrm{avail}}_i\le u_{\max}=0.9$. In contrast to the number of associated users, $u_i$ \emph{can be controlled} by power, channel and airtime split, which is what makes it a meaningful constraint. It is enforced by an adaptive multiplier,
+\paragraph{Constraint} Let $\rho^{\mathrm{need}}_i=\sum_{u\in\mathcal{U}_i} d_u/R_u$ be the airtime AP $i$ needs to carry the offered rates $d_u$ at the PHY rates $R_u$ of its users, and $\rho^{\mathrm{avail}}_i$ the airtime it actually obtains (its share of the collision domain times the MAC efficiency, Section~\ref{sec:sim}). We require the \emph{airtime utilisation} $u_i^t=\rho^{\mathrm{need}}_i/\rho^{\mathrm{avail}}_i\le u_{\max}=0.9$. In contrast to the number of associated users, $u_i$ \emph{can be controlled} by power, channel and airtime split, which is what makes it a meaningful constraint. It is enforced by an adaptive multiplier,
 \begin{equation}
   \lambda_i^{t+1}=\operatorname{clip}\!\Big(\lambda_i^{t}+\rho_\lambda\,\min\!\big(u_i^t-u_{\max},\,0.3\big),\,0,\,\lambda_{\max}\Big),\qquad \rho_\lambda=0.01,\ \lambda_{\max}=1,
   \label{eq:lagr}
@@ -112,7 +138,7 @@ Prediction head & $d_h\to 64\to 1$, ReLU, sigmoid & maps each $\mathbf{Z}_{i,k}$
 \end{tabular}
 \end{table}
 
-\paragraph{Spatial GAT.} For every time step of the history, node features are mixed over the interference graph. For head $k$ and nodes $i,j$ (with $\mathbf{g}_i=\mathbf{W}^{\mathrm{sp}}\mathbf{x}_i$ and $\mathbf{g}^k_i\in\mathbb{R}^{d_k}$ its $k$-th block),
+\paragraph{Spatial GAT} For every time step of the history, node features are mixed over the interference graph. For head $k$ and nodes $i,j$ (with $\mathbf{g}_i=\mathbf{W}^{\mathrm{sp}}\mathbf{x}_i$ and $\mathbf{g}^k_i\in\mathbb{R}^{d_k}$ its $k$-th block),
 \begin{equation}
   e^k_{ij}=\mathrm{LeakyReLU}\big(\mathbf{a}^{k\top}[\mathbf{g}^k_i\,\|\,\mathbf{g}^k_j]\big)+0.1\,a_{ij}
   =\mathrm{LeakyReLU}\big(\mathbf{a}^{k\top}_l\mathbf{g}^k_i+\mathbf{a}^{k\top}_r\mathbf{g}^k_j\big)+0.1\,a_{ij},
@@ -122,7 +148,7 @@ Prediction head & $d_h\to 64\to 1$, ReLU, sigmoid & maps each $\mathbf{Z}_{i,k}$
 \end{equation}
 and $\mathbf{h}^{\mathrm{sp}}_i=\mathrm{ELU}\big(\Vert_{k}\sum_{j}\alpha^k_{ij}\mathbf{g}^k_j\big)\in\mathbb{R}^{d_h}$, where $\mathcal{N}_i=\{j:a_{ij}>0\}$ and $\Vert$ is concatenation over the heads.
 
-\paragraph{Temporal Transformer and schedule cross-attention.} For each AP, a Transformer encoder runs over the $T$ spatially mixed frames and its last output $\mathbf{u}_i\in\mathbb{R}^{d_h}$ summarises the history. The summary is repeated for the $\Delta$ forecast steps and then \emph{queries} the schedule through multi-head cross-attention,
+\paragraph{Temporal Transformer and schedule cross-attention} For each AP, a Transformer encoder runs over the $T$ spatially mixed frames and its last output $\mathbf{u}_i\in\mathbb{R}^{d_h}$ summarises the history. The summary is repeated for the $\Delta$ forecast steps and then \emph{queries} the schedule through multi-head cross-attention,
 \begin{equation}
   \mathbf{Z}_i=\mathrm{LN}\big(\mathbf{U}_i+\mathrm{CrossAttn}(Q=\mathbf{U}_i,\,K=\mathbf{S}_i,\,V=\mathbf{S}_i)\big)\ \text{followed by a residual feed-forward block},
   \qquad \hat L_i^{t+1:t+\Delta}=\mathrm{PredHead}(\mathbf{Z}_i),
@@ -130,12 +156,12 @@ and $\mathbf{h}^{\mathrm{sp}}_i=\mathrm{ELU}\big(\Vert_{k}\sum_{j}\alpha^k_{ij}\
 \end{equation}
 with $\mathbf{U}_i\in\mathbb{R}^{\Delta\times d_h}$ and $\mathbf{S}_i$ projected to $\mathbb{R}^{\Delta\times d_h}$. The embedding $\mathbf{Z}_{\mathrm{fused}}=[\mathbf{Z}_1,\dots,\mathbf{Z}_N]\in\mathbb{R}^{N\times\Delta\times d_h}$ is passed to the agents. Because the summary $\mathbf{U}_i$ is the same for all $\Delta$ steps, the horizon-specific information in $\mathbf{Z}_i$ comes from the schedule; a schedule-free variant (ablation A2, Section~\ref{sec:exp-abl}) therefore has no horizon-specific signal other than the positional structure learned by the head.
 
-\paragraph{Training targets.} The targets of the predictor are the \emph{true} loads $L_i^{t+1+k}$, $k=0..\Delta-1$. A sample $(\mathbf{H},\mathbf{S},\text{targets})$ is stored when the corresponding future intervals have been observed (at the end of the episode; steps beyond the end of the episode are masked), and the predictor is trained on minibatches of 16 stored samples.
+\paragraph{Training targets} The targets of the predictor are the \emph{true} loads $L_i^{t+1+k}$, $k=0..\Delta-1$. A sample $(\mathbf{H},\mathbf{S},\text{targets})$ is stored when the corresponding future intervals have been observed (at the end of the episode; steps beyond the end of the episode are masked), and the predictor is trained on minibatches of 16 stored samples.
 
 \subsection{Module 2: Graph-SAC Agents}
 \label{sec:sac}
 
-\paragraph{State.} The state of agent $i$ concatenates its local features, its slice of the ST-GCAT embedding, its QoS mix, its next-interval schedule features and its radio context:
+\paragraph{State} The state of agent $i$ concatenates its local features, its slice of the ST-GCAT embedding, its QoS mix, its next-interval schedule features and its radio context:
 \begin{equation}
   \mathbf{s}_i^t=\big[\mathbf{h}_i^t,\ \kappa\,\mathrm{vec}(\mathbf{Z}_{\mathrm{fused},i}^t),\ \mathbf{q}_i^t,\ \mathbf{S}_{i}^{t+1},\ \mathbf{r}_i^t\big]\in\mathbb{R}^{5+768+3+8+13=797}.
   \label{eq:state}
@@ -143,14 +169,14 @@ with $\mathbf{U}_i\in\mathbb{R}^{\Delta\times d_h}$ and $\mathbf{S}_i$ projected
 
 The scalar $\kappa=0.03$ scales the embedding block. The layer-normalised embedding has 768 entries of unit scale (norm $\approx 28$), whereas the other 29 inputs have a combined norm of about 3; unscaled, the embedding dominates the first layer of the actor and critic. We chose $\kappa$ among $\{1,0.125,0.03\}$ on validation episodes of one seed (seeds disjoint from the test seeds); larger values gave lower validation reward. This choice is part of the method and its consequences for the contribution of the embedding are discussed in Section~\ref{sec:exp-abl}.
 
-\paragraph{Actor.} The actor has a federated \emph{base} (two layers of 256 units) and a personal \emph{head} (128 units) followed by three output heads: power (Gaussian, squashed by a sigmoid to $[P_{\min},P_{\max}]$ with the corresponding log-density correction), channel (straight-through Gumbel-softmax over $C$ categories with temperature annealed from 2.0 to 0.5, so that the one-hot vector that is executed is the one stored and given to the critic) and airtime budget (Dirichlet with concentrations $\mathrm{softplus}(\cdot)+1$). The critics are double-Q networks with two hidden layers of 256 units. The updates are the standard SAC updates,
+\paragraph{Actor} The actor has a federated \emph{base} (two layers of 256 units) and a personal \emph{head} (128 units) followed by three output heads: power (Gaussian, squashed by a sigmoid to $[P_{\min},P_{\max}]$ with the corresponding log-density correction), channel (straight-through Gumbel-softmax over $C$ categories with temperature annealed from 2.0 to 0.5, so that the one-hot vector that is executed is the one stored and given to the critic) and airtime budget (Dirichlet with concentrations $\mathrm{softplus}(\cdot)+1$). The critics are double-Q networks with two hidden layers of 256 units. The updates are the standard SAC updates,
 \begin{align}
   \mathcal{L}_Q&=\mathbb{E}\Big[\big(Q(s,a)-r-\gamma(\min_j\bar Q_j(s',a')-\alpha_{\mathrm{ent}}\log\pi(a'|s'))\big)^2\Big], \label{eq:critic}\\
   \mathcal{L}_\pi&=\mathbb{E}\big[\alpha_{\mathrm{ent}}\log\pi(a|s)-\min_jQ_j(s,a)\big]+\tfrac{\mu}{2}\|\theta_{\mathrm{base}}-\theta_{\mathrm{anchor}}\|^2, \label{eq:actor}
 \end{align}
 where $\alpha_{\mathrm{ent}}$ is the entropy temperature (initialised to 0.05, automatically tuned towards a target entropy of $-3$) and the last term is the FedProx proximal term towards the last received base (active only in the two hierarchical variants). One gradient update of all agents is made after every environment step (update-to-data ratio one).
 
-\paragraph{Starting from the incumbent configuration.} In an operating venue the network already has a configuration (channel plan, power, equal airtime). All learned agents, including the learned baselines, are initialised close to it: the channel head is biased towards the AP's incumbent channel (round-robin plan), power starts at 14~dBm, the airtime split at $(	frac13,\tfrac13,\tfrac13)$, and the output layers are scaled down so that the initial policy depends little on the state. Exploration during the warm-up episodes is the noise of this initial stochastic policy around the incumbent configuration, not uniformly random actions; learning can then only depart from the incumbent where it finds an improvement. The one exception to the parametrisation is the single shared agent of LSTM-DRL, which has no AP-specific parameters and therefore outputs its channel as an offset from the AP's incumbent channel.
+\paragraph{Starting from the incumbent configuration} In an operating venue the network already has a configuration (channel plan, power, equal airtime). All learned agents, including the learned baselines, are initialised close to it: the channel head is biased towards the AP's incumbent channel (round-robin plan), power starts at 14~dBm, the airtime split at $(	frac13,\tfrac13,\tfrac13)$, and the output layers are scaled down so that the initial policy depends little on the state. Exploration during the warm-up episodes is the noise of this initial stochastic policy around the incumbent configuration, not uniformly random actions; learning can then only depart from the incumbent where it finds an improvement. The one exception to the parametrisation is the single shared agent of LSTM-DRL, which has no AP-specific parameters and therefore outputs its channel as an offset from the AP's incumbent channel.
 
 \subsection{Bidirectional Joint Gradient}
 \label{sec:joint}
@@ -167,14 +193,14 @@ where $\mathcal{L}_\pi(\phi)$ is Eq.~\eqref{eq:actor} evaluated on states rebuil
 
 Only the actor base layers ($797\!\cdot\!256+256+256\!\cdot\!256+256=270{,}080$ parameters) are federated; heads and critics stay local.
 
-\paragraph{Level 1: zone aggregation.} Every $T_{\mathrm{local}}=100$ environment steps the controller of zone $z$ replaces the base of each AP by the quality-weighted average
+\paragraph{Level 1: zone aggregation} Every $T_{\mathrm{local}}=100$ environment steps the controller of zone $z$ replaces the base of each AP by the quality-weighted average
 \begin{equation}
   \theta^{\mathrm{zone}}_z=\sum_{i\in\mathcal{Z}_z}w_i\,\theta_i,\qquad w_i=\frac{\exp(\bar r_i/\tau_w)}{\sum_{j\in\mathcal{Z}_z}\exp(\bar r_j/\tau_w)},\quad\tau_w=0.1,
   \label{eq:zone}
 \end{equation}
 where $\bar r_i$ is the exponential moving average of the (unscaled) environment reward of AP $i$.
 
-\paragraph{Level 2: proximal federated distillation across zones.} Every $T_{\mathrm{global}}=500$ steps the zones do \emph{not} exchange weights. Instead, all agents evaluate their actor on a public reference set $\mathcal{S}_{\mathrm{ref}}$ of $M=100$ states and report soft outputs: channel probabilities $\pi^{\mathrm{ch}}\in\Delta^{C}$, mean airtime budget $\mathbf{w}\in\Delta^3$ and normalised power. A zone controller averages the outputs of its APs (the \emph{zone teacher}) and the venue controller averages the zone teachers into a consensus $(\bar\pi^{\mathrm{ch}},\bar{\mathbf{w}},\bar p)$; this average is the closed-form minimiser of $\frac1Z\sum_z[\mathrm{KL}(\pi^{\mathrm{ch}}_z\|\pi^{\mathrm{ch}})+\|\mathbf{w}_z-\mathbf{w}\|^2+\|p_z-p\|^2]$. The consensus is returned to the zones, and every agent distils its base layers towards it with a proximal term that keeps it close to its own model,
+\paragraph{Level 2: proximal federated distillation across zones} Every $T_{\mathrm{global}}=500$ steps the zones do \emph{not} exchange weights. Instead, all agents evaluate their actor on a public reference set $\mathcal{S}_{\mathrm{ref}}$ of $M=100$ states and report soft outputs: channel probabilities $\pi^{\mathrm{ch}}\in\Delta^{C}$, mean airtime budget $\mathbf{w}\in\Delta^3$ and normalised power. A zone controller averages the outputs of its APs (the \emph{zone teacher}) and the venue controller averages the zone teachers into a consensus $(\bar\pi^{\mathrm{ch}},\bar{\mathbf{w}},\bar p)$; this average is the closed-form minimiser of $\frac1Z\sum_z[\mathrm{KL}(\pi^{\mathrm{ch}}_z\|\pi^{\mathrm{ch}})+\|\mathbf{w}_z-\mathbf{w}\|^2+\|p_z-p\|^2]$. The consensus is returned to the zones, and every agent distils its base layers towards it with a proximal term that keeps it close to its own model,
 \begin{equation}
   \min_{\theta_i}\ \mathrm{KL}\big(\bar\pi^{\mathrm{ch}}\,\|\,\pi_i^{\mathrm{ch}}\big)+\|\bar{\mathbf{w}}-\mathbf{w}_i\|^2+\|\bar p-p_i\|^2+\frac{\mu}{2}\|\theta_i-\theta_i^{\mathrm{before}}\|^2,\qquad\mu=0.01,
   \label{eq:kd}
@@ -183,14 +209,14 @@ solved with 20 Adam steps (learning rate $5\cdot10^{-4}$). The reference set con
 
 The alternative that exchanges weights at this level (FedProx averaging of the zone models, $\theta^{*}=(\sum_z\theta_z+\mu\theta_{\mathrm{prev}})/(Z+\mu)$) is evaluated as a comparator in Section~\ref{sec:exp-fed}.
 
-\paragraph{Communication accounting.} We count the bytes of every message (32-bit floats). Per global round the distillation exchange costs $2ZM(C{+}4)\cdot 4$ bytes between zones and venue controller, instead of $2Z\cdot270{,}080\cdot4$ bytes for weights; the one-off and refresh cost of shipping $\mathcal{S}_{\mathrm{ref}}$ ($M\cdot797\cdot4$ bytes per zone and refresh) is added to the inter-zone total. Measured totals are reported in Table~\ref{tab:fed}. Zone-level traffic between APs and their zone controller is the same as in weight-based schemes and is reported separately.
+\paragraph{Communication accounting} We count the bytes of every message (32-bit floats). Per global round the distillation exchange costs $2ZM(C{+}4)\cdot 4$ bytes between zones and venue controller, instead of $2Z\cdot270{,}080\cdot4$ bytes for weights; the one-off and refresh cost of shipping $\mathcal{S}_{\mathrm{ref}}$ ($M\cdot797\cdot4$ bytes per zone and refresh) is added to the inter-zone total. Measured totals are reported in Table~\ref{tab:fed}. Zone-level traffic between APs and their zone controller is the same as in weight-based schemes and is reported separately.
 
 \subsection{Deployment Mapping: Channel Switching and QoS Queues}
 \label{sec:deploy}
 
-\paragraph{Channel switching.} The channel in the action is applied at the start of the interval and costs service. A switching AP announces the change with channel-switch announcements (CSA); clients that miss it re-associate. We model this as an outage of $t_{\mathrm{sw}}=3$~s of the 300~s interval: the AP's users receive a $t_{\mathrm{sw}}/300$ smaller share of the interval and the packets queued during the outage see an extra delay of $t_{\mathrm{sw}}/2$ on average, which enters the latency, throughput, reward and QoS metrics. The value is an engineering assumption (CSA with a few beacon intervals plus re-association of non-compliant clients); Section~\ref{sec:exp-robust} reports results for $t_{\mathrm{sw}}\in\{0,3,10\}$~s and for a policy that was trained without any switching cost.
+\paragraph{Channel switching} The channel in the action is applied at the start of the interval and costs service. A switching AP announces the change with channel-switch announcements (CSA); clients that miss it re-associate. We model this as an outage of $t_{\mathrm{sw}}=3$~s of the 300~s interval: the AP's users receive a $t_{\mathrm{sw}}/300$ smaller share of the interval and the packets queued during the outage see an extra delay of $t_{\mathrm{sw}}/2$ on average, which enters the latency, throughput, reward and QoS metrics. The value is an engineering assumption (CSA with a few beacon intervals plus re-association of non-compliant clients); Section~\ref{sec:exp-robust} reports results for $t_{\mathrm{sw}}\in\{0,3,10\}$~s and for a policy that was trained without any switching cost.
 
-\paragraph{QoS queues.} Commodity APs implement QoS with the four 802.11e EDCA access categories (AC\_VO, AC\_VI, AC\_BE, AC\_BK), each with its own contention parameters (AIFSN, CW$_{\min}$, CW$_{\max}$, TXOP limit). We map VoIP, video and best-effort to AC\_VO, AC\_VI and AC\_BE. EDCA provides \emph{relative priority}, not a bandwidth split, so the simplex action $\mathbf{w}_i$ is interpreted as an \emph{airtime budget per access category} that is enforced on top of EDCA with the per-AC airtime quota (airtime-fairness / airtime-weight) scheduler available in current AP software, while the EDCA parameters stay at the standard values. To make the action implementable we (i) quantise $\mathbf{w}_i$ to multiples of $1/16$ with a minimum of $1/16$ per category (largest-remainder rounding), which is the granularity of integer airtime weights, and (ii) treat the budgets as limits that are work-conserving: unused airtime of an absent or satisfied category is redistributed to the others. The simulator applies exactly this quantisation and redistribution. Cross-vendor differences in how airtime quotas are exposed, and the presence of a fourth (background) category, are outside the scope of the evaluation; they only change how the three numbers are programmed, not the decision problem.
+\paragraph{QoS queues} Commodity APs implement QoS with the four 802.11e EDCA access categories (AC\_VO, AC\_VI, AC\_BE, AC\_BK), each with its own contention parameters (AIFSN, CW$_{\min}$, CW$_{\max}$, TXOP limit). We map VoIP, video and best-effort to AC\_VO, AC\_VI and AC\_BE. EDCA provides \emph{relative priority}, not a bandwidth split, so the simplex action $\mathbf{w}_i$ is interpreted as an \emph{airtime budget per access category} that is enforced on top of EDCA with the per-AC airtime quota (airtime-fairness / airtime-weight) scheduler available in current AP software, while the EDCA parameters stay at the standard values. To make the action implementable we (i) quantise $\mathbf{w}_i$ to multiples of $1/16$ with a minimum of $1/16$ per category (largest-remainder rounding), which is the granularity of integer airtime weights, and (ii) treat the budgets as limits that are work-conserving: unused airtime of an absent or satisfied category is redistributed to the others. The simulator applies exactly this quantisation and redistribution. Cross-vendor differences in how airtime quotas are exposed, and the presence of a fourth (background) category, are outside the scope of the evaluation; they only change how the three numbers are programmed, not the decision problem.
 
 \begin{algorithm}[htbp]
 \caption{STAG-FedSAC training (one environment step shown; all APs act simultaneously).}\label{alg:main}

@@ -18,7 +18,8 @@ stag_fedsac/
   evaluation/    baselines.py (SSF, LLF, LSTM-DRL, FedDDPG, persistence), run_experiment.py (one method/seed -> JSON)
 scripts/         run_queue.py (job queue), sync.sh
 analysis/        aggregate.py (tables, figures, statistics), oracle_headroom.py (greedy perfect-information reference)
-manuscripts/     LaTeX source of the paper;  response/  response letter
+manuscripts/     LaTeX source of the revised paper;  response/  response letter (LaTeX)
+submission/      compiled revised manuscript and point-by-point response (PDF)
 results/raw/     one JSON record per (tag, method, seed)
 ```
 

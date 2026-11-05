@@ -22,7 +22,7 @@
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.8\linewidth]{fig_convergence.png}
-\caption{Reward on five held-out validation episodes during training (mean and standard deviation over seeds). During the first 200 episodes the actors explore around the incumbent configuration, so the learned methods start at the level of the static incumbent plan (SSF); horizontal lines are the non-learning baselines.}
+\caption{Reward on five held-out validation episodes during training (mean and standard deviation over seeds). During the first 200 episodes the actors only explore around the incumbent configuration (no gradient updates of the policy), so every learned method starts at the level of the incumbent plan; horizontal lines are the non-learning baselines.}
 \label{fig:conv}
 \end{figure}
 

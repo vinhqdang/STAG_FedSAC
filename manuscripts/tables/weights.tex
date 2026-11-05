@@ -1,1 +1,12 @@
-\begin{tabular}{c}stub\end{tabular}
+\begin{tabular}{lccccccccc}
+\toprule
+ & \multicolumn{3}{c}{SSF} & \multicolumn{3}{c}{FedDDPG} & \multicolumn{3}{c}{STAG-FedSAC} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-7}\cmidrule(lr){8-10}
+Weights ($\alpha/\beta/\gamma/\delta$) & Reward & Lat. & JFI & Reward & Lat. & JFI & Reward & Lat. & JFI \\
+\midrule
+Default (0.40/0.25/0.20/0.05) & 0.182 & 124 & 0.986 & 0.114 & 189 & 0.941 & 0.133 & 180 & 0.947 \\
+Equal weights (0.25/0.25/0.25/0.25) & 0.106 & 124 & 0.986 & 0.046 & 165 & 0.935 & 0.059 & 166 & 0.952 \\
+Throughput-heavy (0.55/0.15/0.20/0.10) & 0.308 & 124 & 0.986 & 0.226 & 196 & 0.928 & 0.250 & 188 & 0.942 \\
+Latency-heavy (0.20/0.50/0.20/0.10) & -0.106 & 124 & 0.986 & -0.182 & 186 & 0.936 & -0.122 & 135 & 0.972 \\
+\bottomrule
+\end{tabular}

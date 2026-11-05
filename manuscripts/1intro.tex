@@ -24,7 +24,7 @@ We propose \textbf{STAG-FedSAC}, a framework that combines (i)~a schedule-condit
   \label{fig:architecture}
 \end{figure}
 
-\paragraph{Contributions.} To the best of our knowledge, the combination below has not been reported for WiFi resource management; we evaluate each element separately with ablations and say where the evidence is weak.
+\paragraph{Contributions} To the best of our knowledge, the combination below has not been reported for WiFi resource management; we evaluate each element separately with ablations and say where the evidence is weak.
 \begin{itemize}
   \item \textbf{Schedule-conditioned forecasting} (ST-GCAT): timetable features enter a graph-attention and Transformer predictor as cross-attention keys and values, giving horizon-specific forecasts up to $\Delta=6$ intervals ahead.
   \item \textbf{Graph-embedded SAC state}: the agent receives the full embedding $\mathbf{Z}_\mathrm{fused}\in\mathbb{R}^{N\times\Delta\times d_h}$ instead of a scalar forecast.
