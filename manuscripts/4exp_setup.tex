@@ -12,7 +12,7 @@ All experiments use a Python simulator of a transit terminal with $N=30$ APs on 
 \caption{Simulator parameters.}
 \label{tab:sim}
 \small
-\begin{tabular}{ll}
+\begin{tabular}{P{0.34\linewidth}P{0.54\linewidth}}
 \toprule
 \textbf{Item} & \textbf{Value} \\
 \midrule
@@ -64,8 +64,10 @@ All learned methods are trained with the same protocol (same simulator, the same
 \centering
 \caption{Hyperparameters (identical for all learned methods where applicable); the incumbent configuration is round-robin channels, 14~dBm, equal airtime.}
 \label{tab:hyper}
-\small
-\begin{tabular}{lll}
+\footnotesize
+\setlength{\tabcolsep}{3pt}\renewcommand{\arraystretch}{0.92}
+\adjustbox{max width=\linewidth,max totalheight=0.8\textheight}{%
+\begin{tabular}{P{0.43\linewidth}P{0.2\linewidth}P{0.29\linewidth}}
 \toprule
 \textbf{Parameter} & \textbf{Symbol} & \textbf{Value} \\
 \midrule
@@ -73,28 +75,28 @@ All learned methods are trained with the same protocol (same simulator, the same
 \quad APs / channels / zones & $N, C, Z$ & 30, 11, 3 \\
 \quad Control interval / episode & & 5 min / 12 intervals \\
 \quad History window / forecast horizon & $T,\Delta$ & 12 (60 min) / 6 (30 min) \\
-\quad Channel-switch outage / airtime granularity & $t_{\mathrm{sw}}$ / EDCA levels & 3 s / 1/16 \\
+\quad Switch outage / airtime step & $t_{\mathrm{sw}}$ / EDCA & 3 s / 1/16 \\
 \multicolumn{3}{l}{\emph{Reward}} \\
-\quad Throughput, latency, fairness, QoS, prediction & $\alpha,\beta,\gamma,\delta,\delta_p$ & 0.40, 0.25, 0.20, 0.05, 0.10 \\
+\quad Weights tp, lat, fair, QoS, pred. & $\alpha,\beta,\gamma,\delta,\delta_p$ & 0.40, 0.25, 0.20, 0.05, 0.10 \\
 \quad Reward scale for learning & $R_{\mathrm{s}}$ & 10 \\
 \multicolumn{3}{l}{\emph{ST-GCAT}} \\
-\quad GAT / Transformer heads, layers, $d_h$ & $K$, $L$, $d_h$ & 4, 2, 128 \\
+\quad Heads, layers, width $d_h$ & $K$, $L$, $d_h$ & 4, 2, 128 \\
 \quad Predictor learning rate, batch & $\eta_\phi$ & $5\times10^{-4}$, 16 samples \\
 \quad Joint gradient weight & $\eta$ & 0.10 \\
 \multicolumn{3}{l}{\emph{SAC}} \\
 \quad Actor / critic hidden layers & & [256, 256] (+128 personal head) \\
 \quad Batch, replay size per AP & & 256, 24{,}000 transitions (all episodes) \\
-\quad Learning rate actor, critic, temperature & & $3\times10^{-4}$ \\
+\quad Learning rate (actor, critic, temp.) & & $3\times10^{-4}$ \\
 \quad Discount / soft target update & $\gamma,\tau$ & 0.99 / 0.005 \\
 \quad Initial temperature / target entropy & & 0.05 / $-3$ \\
 \quad Gumbel-softmax temperature & & 2.0 $\to$ 0.5 (linear) \\
-\quad Embedding scale in the state & $\kappa$ & 0.03 (chosen from $\{1,0.125,0.03\}$) \\
+\quad Embedding scale in the state & $\kappa$ & 0.03 (from $\{1,0.125,0.03\}$) \\
 \multicolumn{3}{l}{\emph{HierFed-KD}} \\
 \quad Zone / global round & $T_\ell,T_g$ & 100 / 500 steps \\
-\quad Proximal weight, quality temperature & $\mu,\tau_w$ & 0.01, 0.1 \\
-\quad Reference states, distillation steps, lr & $M$ & 100, 20, $5\times10^{-4}$ \\
+\quad Proximal weight, quality temp. & $\mu,\tau_w$ & 0.01, 0.1 \\
+\quad Ref. states, KD steps, lr & $M$ & 100, 20, $5\times10^{-4}$ \\
 \multicolumn{3}{l}{\emph{Constraint}} \\
 \quad Utilisation limit, step, bound & $u_{\max},\rho_\lambda,\lambda_{\max}$ & 0.9, 0.01, 1 \\
 \bottomrule
-\end{tabular}
+\end{tabular}}
 \end{table}

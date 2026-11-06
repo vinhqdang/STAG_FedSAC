@@ -28,7 +28,7 @@ Per-user data (association records, device identifiers, traffic mix, mobility tr
 \caption{Main notation.}
 \label{tab:notation}
 \small
-\begin{tabular}{ll}
+\begin{tabular}{P{0.36\linewidth}P{0.5\linewidth}}
 \toprule
 \textbf{Symbol} & \textbf{Meaning} \\
 \midrule
@@ -53,7 +53,7 @@ $t_{\mathrm{sw}}$ & channel-switch outage \\
 \caption{Information available to the framework at control interval $t$ (per AP unless stated).}
 \label{tab:obs}
 \small
-\begin{tabular}{lll}
+\begin{tabular}{P{0.17\linewidth}P{0.37\linewidth}P{0.27\linewidth}}
 \toprule
 \textbf{Input} & \textbf{Content} & \textbf{Source / dimension} \\
 \midrule
@@ -72,7 +72,7 @@ Schedule $\mathbf{S}^{t:t+\Delta}$ & 8 features per AP and future interval deriv
 \caption{Schedule features $\mathbf{S}_i^{\tau}$ of AP $i$ for a future interval $\tau$ (events of the zone of AP $i$; normalising constants in brackets). A timetable event is a departure or arrival with a time $t_e$ and a number of passengers $n_e$.}
 \label{tab:sched}
 \small
-\begin{tabular}{cl}
+\begin{tabular}{cP{0.78\linewidth}}
 \toprule
 \# & Feature \\
 \midrule
@@ -99,12 +99,13 @@ Schedule $\mathbf{S}^{t:t+\Delta}$ & 8 features per AP and future interval deriv
 \end{equation}
 with every term on a unit scale:
 \begin{align*}
-  r^{\mathrm{tp}}_i&=\min\!\big(1,\,X_i/X_{\mathrm{ref}}\big), & X_i&=\text{aggregate throughput of AP }i\ [\mathrm{Mbps}],\ X_{\mathrm{ref}}=100,\\
-  r^{\mathrm{lat}}_i&=-\min\!\big(1,\,\ell_i/\ell_{\mathrm{ref}}\big), & \ell_i&=\text{mean user latency [ms]},\ \ell_{\mathrm{ref}}=100,\\
-  r^{\mathrm{fair}}_i&=\frac{(\sum_{u}\varsigma_u)^2}{n_i\sum_u\varsigma_u^2}, & \varsigma_u&=\text{throughput of user }u\,/\,\text{its offered rate},\\
-  r^{\mathrm{qos}}_i&=-\frac{|\{u:\ u\text{ violates its class requirement}\}|}{n_i}, & &\text{requirement: SINR}\ge\theta_c,\ \text{latency}\le\ell^{\mathrm{SLA}}_c,\ \varsigma_u\ge 0.5,\\
-  b^{\mathrm{pred}}_i&=-\big|\hat L_i^{t+1}-L_i^{t+1}\big|, & &\text{(training signal only; not part of the evaluation reward).}
+  r^{\mathrm{tp}}_i&=\min\!\big(1,\,X_i/X_{\mathrm{ref}}\big), &
+  r^{\mathrm{lat}}_i&=-\min\!\big(1,\,\ell_i/\ell_{\mathrm{ref}}\big),\\
+  r^{\mathrm{fair}}_i&=\frac{(\sum_{u}\varsigma_u)^2}{n_i\sum_u\varsigma_u^2}, &
+  r^{\mathrm{qos}}_i&=-\frac{|\{u:\ u\text{ violates its class requirement}\}|}{n_i},\\
+  b^{\mathrm{pred}}_i&=-\big|\hat L_i^{t+1}-L_i^{t+1}\big|, & &
 \end{align*}
+where $X_i$ is the aggregate throughput of AP $i$ in Mbps ($X_{\mathrm{ref}}=100$), $\ell_i$ the mean user latency in ms ($\ell_{\mathrm{ref}}=100$), $n_i$ the number of users of AP $i$, and $\varsigma_u$ the throughput of user $u$ divided by its offered rate. A user violates its class requirement if its SINR is below $\theta_c$, its latency above $\ell^{\mathrm{SLA}}_c$, or $\varsigma_u<0.5$. The term $b^{\mathrm{pred}}_i$ is a training signal only and is not part of the evaluation reward.
 The weights $\alpha=0.40$, $\beta=0.25$, $\gamma=0.20$, $\delta=0.05$, $\delta_p=0.10$ sum to one and encode an operator priority order (throughput, then latency, then fairness; the QoS-violation term is small because violations already lower the throughput and latency terms, and the prediction term is a small auxiliary shaping signal). They are a design choice, not the output of a derivation: we do not claim they are optimal, and Section~\ref{sec:exp-weights} reports how conclusions change under three other weightings. SAC is trained on the reward multiplied by a constant scale $R_{\mathrm{s}}=10$ that matches the reward magnitude to the entropy term; \emph{evaluation always uses the unscaled environment reward of Eq.~\eqref{eq:reward} without $b^{\mathrm{pred}}$}, so that methods without a predictor are scored identically.
 
 \paragraph{Constraint} Let $\rho^{\mathrm{need}}_i=\sum_{u\in\mathcal{U}_i} d_u/R_u$ be the airtime AP $i$ needs to carry the offered rates $d_u$ at the PHY rates $R_u$ of its users, and $\rho^{\mathrm{avail}}_i$ the airtime it actually obtains (its share of the collision domain times the MAC efficiency, Section~\ref{sec:sim}). We require the \emph{airtime utilisation} $u_i^t=\rho^{\mathrm{need}}_i/\rho^{\mathrm{avail}}_i\le u_{\max}=0.9$. In contrast to the number of associated users, $u_i$ \emph{can be controlled} by power, channel and airtime split, which is what makes it a meaningful constraint. It is enforced by an adaptive multiplier,
@@ -124,7 +125,7 @@ ST-GCAT forecasts the normalised load $L_i^{t+1:t+\Delta}$ of every AP ($L_i=\mi
 \caption{ST-GCAT layer dimensions ($d_h=128$, $K=4$ heads, $d_k=d_h/K=32$, $F=5$ input features, $D_s=8$ schedule features, $\Delta=6$).}
 \label{tab:dims}
 \small
-\begin{tabular}{lll}
+\begin{tabular}{P{0.24\linewidth}P{0.24\linewidth}P{0.36\linewidth}}
 \toprule
 \textbf{Map} & \textbf{Shape} & \textbf{Role} \\
 \midrule
@@ -139,21 +140,21 @@ Prediction head & $d_h\to 64\to 1$, ReLU, sigmoid & maps each $\mathbf{Z}_{i,k}$
 \end{table}
 
 \paragraph{Spatial GAT} For every time step of the history, node features are mixed over the interference graph. For head $k$ and nodes $i,j$ (with $\mathbf{g}_i=\mathbf{W}^{\mathrm{sp}}\mathbf{x}_i$ and $\mathbf{g}^k_i\in\mathbb{R}^{d_k}$ its $k$-th block),
-\begin{equation}
-  e^k_{ij}=\mathrm{LeakyReLU}\big(\mathbf{a}^{k\top}[\mathbf{g}^k_i\,\|\,\mathbf{g}^k_j]\big)+0.1\,a_{ij}
-  =\mathrm{LeakyReLU}\big(\mathbf{a}^{k\top}_l\mathbf{g}^k_i+\mathbf{a}^{k\top}_r\mathbf{g}^k_j\big)+0.1\,a_{ij},
-  \quad
-  \alpha^k_{ij}=\frac{\exp e^k_{ij}}{\sum_{m\in\mathcal{N}_i\cup\{i\}}\exp e^k_{im}},
+\begin{align}
+  e^k_{ij}&=\mathrm{LeakyReLU}\big(\mathbf{a}^{k\top}[\mathbf{g}^k_i\,\|\,\mathbf{g}^k_j]\big)+0.1\,a_{ij}\nonumber\\
+  &=\mathrm{LeakyReLU}\big(\mathbf{a}^{k\top}_l\mathbf{g}^k_i+\mathbf{a}^{k\top}_r\mathbf{g}^k_j\big)+0.1\,a_{ij},\nonumber\\
+  \alpha^k_{ij}&=\frac{\exp e^k_{ij}}{\sum_{m\in\mathcal{N}_i\cup\{i\}}\exp e^k_{im}},
   \label{eq:gat}
-\end{equation}
+\end{align}
 and $\mathbf{h}^{\mathrm{sp}}_i=\mathrm{ELU}\big(\Vert_{k}\sum_{j}\alpha^k_{ij}\mathbf{g}^k_j\big)\in\mathbb{R}^{d_h}$, where $\mathcal{N}_i=\{j:a_{ij}>0\}$ and $\Vert$ is concatenation over the heads.
 
 \paragraph{Temporal Transformer and schedule cross-attention} For each AP, a Transformer encoder runs over the $T$ spatially mixed frames and its last output $\mathbf{u}_i\in\mathbb{R}^{d_h}$ summarises the history. The summary is repeated for the $\Delta$ forecast steps and then \emph{queries} the schedule through multi-head cross-attention,
-\begin{equation}
-  \mathbf{Z}_i=\mathrm{LN}\big(\mathbf{U}_i+\mathrm{CrossAttn}(Q=\mathbf{U}_i,\,K=\mathbf{S}_i,\,V=\mathbf{S}_i)\big)\ \text{followed by a residual feed-forward block},
-  \qquad \hat L_i^{t+1:t+\Delta}=\mathrm{PredHead}(\mathbf{Z}_i),
+\begin{align}
+  \mathbf{Z}_i&=\mathrm{FFN}\Big(\mathrm{LN}\big(\mathbf{U}_i+\mathrm{CrossAttn}(Q=\mathbf{U}_i,\,K=\mathbf{S}_i,\,V=\mathbf{S}_i)\big)\Big),\nonumber\\
+  \hat L_i^{t+1:t+\Delta}&=\mathrm{PredHead}(\mathbf{Z}_i),
   \label{eq:pred}
-\end{equation}
+\end{align}
+where $\mathrm{FFN}$ denotes a residual feed-forward block with layer normalisation,
 with $\mathbf{U}_i\in\mathbb{R}^{\Delta\times d_h}$ and $\mathbf{S}_i$ projected to $\mathbb{R}^{\Delta\times d_h}$. The embedding $\mathbf{Z}_{\mathrm{fused}}=[\mathbf{Z}_1,\dots,\mathbf{Z}_N]\in\mathbb{R}^{N\times\Delta\times d_h}$ is passed to the agents. Because the summary $\mathbf{U}_i$ is the same for all $\Delta$ steps, the horizon-specific information in $\mathbf{Z}_i$ comes from the schedule; a schedule-free variant (ablation A2, Section~\ref{sec:exp-abl}) therefore has no horizon-specific signal other than the positional structure learned by the head.
 
 \paragraph{Training targets} The targets of the predictor are the \emph{true} loads $L_i^{t+1+k}$, $k=0..\Delta-1$. A sample $(\mathbf{H},\mathbf{S},\text{targets})$ is stored when the corresponding future intervals have been observed (at the end of the episode; steps beyond the end of the episode are masked), and the predictor is trained on minibatches of 16 stored samples.
@@ -219,6 +220,7 @@ The alternative that exchanges weights at this level (FedProx averaging of the z
 \paragraph{QoS queues} Commodity APs implement QoS with the four 802.11e EDCA access categories (AC\_VO, AC\_VI, AC\_BE, AC\_BK), each with its own contention parameters (AIFSN, CW$_{\min}$, CW$_{\max}$, TXOP limit). We map VoIP, video and best-effort to AC\_VO, AC\_VI and AC\_BE. EDCA provides \emph{relative priority}, not a bandwidth split, so the simplex action $\mathbf{w}_i$ is interpreted as an \emph{airtime budget per access category} that is enforced on top of EDCA with the per-AC airtime quota (airtime-fairness / airtime-weight) scheduler available in current AP software, while the EDCA parameters stay at the standard values. To make the action implementable we (i) quantise $\mathbf{w}_i$ to multiples of $1/16$ with a minimum of $1/16$ per category (largest-remainder rounding), which is the granularity of integer airtime weights, and (ii) treat the budgets as limits that are work-conserving: unused airtime of an absent or satisfied category is redistributed to the others. The simulator applies exactly this quantisation and redistribution. Cross-vendor differences in how airtime quotas are exposed, and the presence of a fourth (background) category, are outside the scope of the evaluation; they only change how the three numbers are programmed, not the decision problem.
 
 \begin{algorithm}[htbp]
+\small
 \caption{STAG-FedSAC training (one environment step shown; all APs act simultaneously).}\label{alg:main}
 \begin{algorithmic}[1]
 \State \textbf{Initialise} ST-GCAT $\phi$; for every AP $i$: actor $\pi_i$, critics $Q_i$, targets $\bar Q_i$, buffer $\mathcal{B}_i$, $\lambda_i=0$.
