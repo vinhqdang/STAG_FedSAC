@@ -243,7 +243,7 @@ def main() -> None:
                 f"{fmt(seed_values(r[m], k).values(), dd)}" for m in ("ssf", "fedddpg", "full") for k, dd in (("reward", 3), ("lat", 0), ("jfi", 3))) + " \\\\")
     if wl:
         write(os.path.join(args.out_tables, "weights.tex"),
-              "\\begin{tabular}{lccccccccc}\n\\toprule\n & \\multicolumn{3}{c}{SSF} & \\multicolumn{3}{c}{FedDDPG} & \\multicolumn{3}{c}{STAG-FedSAC} \\\\\n"
+              "\\begin{tabular}{lccccccccc}\n\\toprule\n & \\multicolumn{3}{c}{SSF} & \\multicolumn{3}{c}{FedDDPG} & \\multicolumn{3}{c}{STAG-FedSAC (latent)} \\\\\n"
               "\\cmidrule(lr){2-4}\\cmidrule(lr){5-7}\\cmidrule(lr){8-10}\nWeights ($\\alpha/\\beta/\\gamma/\\delta$) & Reward & Lat. & JFI & Reward & Lat. & JFI & Reward & Lat. & JFI \\\\\n\\midrule\n"
               + "\n".join(wl) + "\n\\bottomrule\n\\end{tabular}\n")
 

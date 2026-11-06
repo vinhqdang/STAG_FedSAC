@@ -63,6 +63,13 @@
 
 \input{4exp_fed_text}
 
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.6\linewidth]{fig_federation.png}
+\caption{Held-out reward against inter-zone traffic during training for the federation schemes of Table~\ref{tab:fed} (mean and standard deviation over seeds; zero traffic is plotted at 0.05~MB).}
+\label{fig:fed}
+\end{figure}
+
 \subsection{Robustness to the Simulator Assumptions}
 \label{sec:exp-robust}
 
@@ -81,7 +88,7 @@
 
 \begin{table}[htbp]
 \centering
-\caption{Sensitivity to the reward weights (one training seed per cell; reward is computed with the weights used in training, so rewards are not comparable across rows; latency and JFI are).}
+\caption{Sensitivity to the reward weights (one training seed per cell; ``STAG-FedSAC'' is the latent-embedding configuration with $\eta=0.1$; reward is computed with the weights used in training, so rewards are not comparable across rows; latency and JFI are).}
 \label{tab:weights}
 \small
 \adjustbox{max width=\linewidth}{\input{tables/weights}}

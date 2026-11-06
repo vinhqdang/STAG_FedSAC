@@ -28,100 +28,100 @@ Journal of Network and Systems Management
 
 Dear Dr.\ Botero,
 
-We would like to express our sincere gratitude to you and the reviewers for the constructive, insightful, and comprehensive feedback on our manuscript. We have revised the paper substantially to address every comment raised. Specifically, we have significantly upgraded the physical and protocol realism of our evaluation, formalized the methodological and architectural definitions, expanded our experimental campaign across multiple random seeds with paired statistical confidence intervals, and included in-depth sensitivity and ablation studies.
+We would like to express our sincere gratitude to you and the reviewers for the constructive, insightful, and comprehensive feedback on our manuscript. We have revised the paper substantially to address every comment raised. Specifically, we have extended the physical and protocol realism of our evaluation, formalized the methodological and architectural definitions, expanded our experimental campaign across multiple random seeds with paired statistical confidence intervals, and included in-depth sensitivity and ablation studies.
 
 Below, we provide a point-by-point response detailing how each comment was addressed, the additional experiments conducted, and the corresponding updates made in the revised manuscript. Page, section, equation, and table numbers refer directly to the revised manuscript.
 
 \section*{0. Executive Overview of the Revision}
 
 \textbf{1. High-Fidelity MAC Contention and Queuing Delay (Reviewer~2, R2.1):} 
-To bridge the gap between idealized PHY capacity models and real-world medium behavior, we integrated an explicit carrier-sense medium contention model based on Bianchi's IEEE 802.11 Distributed Coordination Function (DCF) saturation model, coupled with an M/G/1-type queuing delay framework. Quantitative evaluations (Section~4.8, Table~9) show that ignoring medium contention understates network latency by approximately $45\%$, and that policies trained without contention awareness perform poorly in shared mediums.
+To bridge the gap between idealized PHY capacity models and real-world medium behavior, we integrated an explicit carrier-sense medium contention model based on Bianchi's IEEE 802.11 Distributed Coordination Function (DCF) saturation model, coupled with an M/G/1-type queuing delay framework. Quantitative evaluations (Section~\ref{sec:exp-robust}, Table~\ref{tab:robust}) show that ignoring medium contention understates network latency by approximately $45\%$, and that policies trained without contention perform worse when contention is present.
 
 \textbf{2. Realistic Channel-Switching Penalties (Reviewer~2, R2.2):} 
-We extended the network environment to penalize frequent channel switching with a realistic outage delay ($t_{\mathrm{sw}}=3$~s), accounting for Channel Switch Announcements (CSA) and client re-association. We demonstrated that STAG-FedSAC maintains outstanding operational stability ($0.15$ switches/AP/step), whereas conventional continuous DRL baselines (FedDDPG and LSTM-DRL) suffer from severe channel thrashing ($>0.66$ switches/AP/step) that incurs severe latency and service penalties (Section~4.4, Table~5).
+We extended the network environment to penalize frequent channel switching with a realistic outage delay ($t_{\mathrm{sw}}=3$~s), accounting for Channel Switch Announcements (CSA) and client re-association. STAG-FedSAC changes far fewer channels ($0.15$ switches/AP/step; static plan SSF: $0.075$) than the learned DRL baselines FedDDPG and LSTM-DRL ($0.67$--$0.75$ switches/AP/step), which incur large latency and service penalties from the switching (Section~\ref{sec:exp-main}, Table~\ref{tab:main}).
 
 \textbf{3. Standards-Compliant 802.11e EDCA Airtime Budgeting (Reviewer~2, R2.3):} 
-We bridged the architectural gap between continuous reinforcement learning actions and commodity AP QoS queues by mapping VoIP, video, and best-effort traffic onto 802.11e EDCA access categories (AC\_VO, AC\_VI, and AC\_BE). The policy's airtime budget action is enforced via $1/16$ integer-quantized quotas implemented on top of EDCA with work-conserving redistribution, directly aligning with current enterprise WLAN driver architectures (Section~3.7).
+We bridged the architectural gap between continuous reinforcement learning actions and commodity AP QoS queues by mapping VoIP, video, and best-effort traffic onto 802.11e EDCA access categories (AC\_VO, AC\_VI, and AC\_BE). The policy's airtime budget action is enforced via $1/16$ integer-quantized quotas implemented on top of EDCA with work-conserving redistribution, intended to be realisable with current enterprise WLAN driver architectures; this has not been validated on hardware (Section~\ref{sec:deploy}).
 
 \textbf{4. Methodological Formalization and Architectural Precision (Reviewer~1, R1.1, R1.2, R1.4, R2.4):} 
-We thoroughly revised Section~3: (i) defining the three-tier system architecture and explicit entity roles (per-AP agents, zone controllers, venue controller; Section~3.1); (ii) detailing the exact time and data flow over each control interval; (iii) tabulating all state inputs (Table~2), schedule features (Table~3), and ST-GCAT layer dimensions and attention vectors (Table~4); and (iv) providing complete algorithmic pseudo-code in Algorithm~1.
+We thoroughly revised Section~\ref{sec:method}: (i) defining the three-tier system architecture and explicit entity roles (per-AP agents, zone controllers, venue controller; Section~\ref{sec:roles}); (ii) detailing the exact time and data flow over each control interval; (iii) tabulating all state inputs (Table~\ref{tab:obs}), schedule features (Table~\ref{tab:sched}), and ST-GCAT layer dimensions and attention vectors (Table~\ref{tab:dims}); and (iv) providing complete algorithmic pseudo-code in Algorithm~\ref{alg:main}.
 
 \textbf{5. Multi-Objective Reward Rationale and Sensitivity Analysis (Reviewer~1, R1.3):} 
-We formalized the physical justification and unit-scale normalization for each term in the multi-objective reward function (throughput, latency, fairness, QoS SLA violations, and predictive shaping). We added an extensive sensitivity analysis across four diverse operator priority profiles (default, equal weights, throughput-heavy, and latency-heavy; Section~4.9, Table~8), demonstrating robust policy ranking and stability.
+We formalized the physical justification and unit-scale normalization for each term in the multi-objective reward function (throughput, latency, fairness, QoS SLA violations, and predictive shaping). We added a sensitivity analysis across four diverse operator priority profiles (default, equal weights, throughput-heavy, and latency-heavy; Section~\ref{sec:exp-weights}, Table~\ref{tab:weights}), where the ranking of the methods (SSF, then STAG-FedSAC (latent), then FedDDPG) was the same in all four profiles (one training seed per cell).
 
 \textbf{6. Multi-Operator Privacy Boundaries and Bandwidth Quantification (Reviewer~1, R1.5):} 
-We clarified the operational rationale for federation across multi-operator venue zones (e.g., terminal concourses vs.\ proprietary airline lounges). We established that HierFed-KD maintains strict data minimization by ensuring raw user association logs, transitions, and local model weights never leave local administrative domains. Furthermore, exact byte-level communication accounting (Table~7) demonstrates that HierFed-KD cuts wide-area inter-zone traffic by $\commRatioAFive\times$ relative to weight-based hierarchical federation and $\commRatioFlat\times$ relative to flat FedAvg.
+We clarified the operational rationale for federation across multi-operator venue zones (e.g., terminal concourses vs.\ proprietary airline lounges). HierFed-KD keeps raw user association logs and transitions at the AP and exchanges no model weights between zones; this is data minimisation, not a formal privacy guarantee. Furthermore, exact byte-level communication accounting (Table~\ref{tab:fed}) demonstrates that HierFed-KD cuts wide-area inter-zone traffic by $\commRatioAFive\times$ relative to weight-based hierarchical federation and $\commRatioFlat\times$ relative to flat FedAvg.
 
 \textbf{7. Multi-Seed Statistical Validation and Actionable Architectural Insights (Editor):} 
-All experimental results are generated from logged runs across multiple random seeds, accompanied by paired bootstrap confidence intervals (Table~6) and exact permutation tests. Furthermore, systematic ablations reveal crucial architectural insights for wireless reinforcement learning: direct conditioning on compact, invariant schedule features provides representation stationarity in off-policy replay buffers, outperforming high-dimensional latent embedding injection and avoiding buffer staleness.
+All experimental results are generated from logged runs across multiple random seeds, accompanied by paired bootstrap confidence intervals (Table~\ref{tab:stats}) and exact permutation tests. Furthermore, in our ablations, direct conditioning on compact schedule features performed better than injecting the high-dimensional latent embedding, and the joint predictor--policy gradient did not help; buffer staleness is a plausible explanation that we did not test.
 
 \section*{1. Detailed Reply to the Editor}
 
 \rev{Editor: ``Please ensure the results are accurately reported, any overstated conclusions are rewritten and the limitations of the work fully explained.''}
 
-\resp We have carefully audited the manuscript to ensure that all conclusions are strictly grounded in empirical evidence, that limitations are comprehensively delineated, and that claims are presented with scientific rigor:
+\resp We have carefully audited the manuscript to ensure that all conclusions are grounded in the empirical evidence, that limitations are comprehensively delineated, and that claims are presented with scientific rigor:
 \begin{itemize}[leftmargin=1.2em,itemsep=0.1em]
-  \item \textbf{Transparent, Reproducible Empirical Protocol}: Every performance number, table, and figure in the revised manuscript is generated directly from logged multi-seed training runs using our repository analysis script (\texttt{analysis/aggregate.py}). Table~6 provides paired bootstrap confidence intervals and exact two-sided sign-flip permutation tests to verify statistical effect sizes.
-  \item \textbf{Grounded Scientific Framing}: We have removed absolute superlatives (e.g., replacing claims of being the ``first'' or having ``no prior work'' with precise comparative statements regarding reviewed literature in Section~2). We clearly demarcate the operational advantages of STAG-FedSAC: it outperforms the static incumbent configuration SSF by reducing average user latency from $\mSSFLat$~ms to $\mPropLat$~ms (an $11.8\%$ improvement) while boosting throughput ($\mPropTput$~Mbps/user) and QoS satisfaction ($\mPropQos$), and substantially outperforms learned DRL baselines (FedDDPG and LSTM-DRL) by over $56\%$ in reward and $40\%$ in latency while preventing destructive channel thrashing.
-  \item \textbf{Comprehensive Discussion of Practical Limitations (Section~5)}: We added a dedicated section examining the practical boundaries of the current evaluation, including the quasi-static 5-minute interval assumption, the use of Bianchi DCF saturation approximations rather than packet-level PHY/MAC emulation, the handling of real-world timetable delays and flight cancellations, and the interface requirements for 802.11e EDCA airtime budgeting on commodity AP hardware.
+  \item \textbf{Transparent, Reproducible Empirical Protocol}: Every performance number, table, and figure in the revised manuscript is generated directly from logged multi-seed training runs using our repository analysis script (\texttt{analysis/aggregate.py}). Table~\ref{tab:stats} provides paired bootstrap confidence intervals and exact two-sided sign-flip permutation tests to verify statistical effect sizes.
+  \item \textbf{Grounded Scientific Framing}: We have removed absolute superlatives (e.g., replacing claims of being the ``first'' or having ``no prior work'' with precise comparative statements regarding reviewed literature in Section~\ref{sec:related}). We state what STAG-FedSAC (Proposed) does and does not achieve: it matches the static incumbent configuration SSF in reward ($\mPropReward$ against $\mSSFReward$, within seed variation) and reduces average user latency from $\mSSFLat$~ms to $\mPropLat$~ms ($11.8\%$), with throughput ($\mPropTput$~Mbps/user) and QoS satisfaction ($\mPropQos$) on par with SSF; it outperforms the learned DRL baselines (FedDDPG and LSTM-DRL) by over $56\%$ in reward and $40\%$ in latency with far fewer channel switches.
+  \item \textbf{Comprehensive Discussion of Practical Limitations (Section~\ref{sec:limits})}: We added a dedicated section examining the practical boundaries of the current evaluation, including the quasi-static 5-minute interval assumption, the use of Bianchi DCF saturation approximations rather than packet-level PHY/MAC emulation, the synthetic exact timetable, the three training seeds, the post-hoc selection of the proposed configuration, the use of the latent-embedding configuration in the federation, robustness and weight experiments, and the absence of hardware validation of the EDCA mapping.
 \end{itemize}
 
 \section*{2. Detailed Point-by-Point Reply to Reviewer 1}
 
 \rev{R1.1 -- ``The presentation of the idea from a methodological point of view is unclear. Many concepts are loosely presented, as if some information would be missing.''}
 
-\resp We have comprehensively rewritten Section~3 to provide a mathematically formal, self-contained presentation:
+\resp We have comprehensively rewritten Section~\ref{sec:method} to provide a mathematically formal, self-contained presentation:
 \begin{enumerate}[leftmargin=1.2em,itemsep=0.1em]
-  \item \textbf{System Model and Role Formalization (Section~3.1)}: We explicitly define the three operational entities: the per-AP SAC agent, the zone controller, and the venue controller, detailing their hierarchical relationships and interactions.
-  \item \textbf{Data Flow Timeline (Section~3.1)}: We specify the precise chronological sequence of information exchange and decision-making over each 5-minute control interval.
-  \item \textbf{Comprehensive Input Specification (Tables~2 and~3)}: Table~2 details every input feature, its source, update frequency, and tensor dimensions. Table~3 specifies the 8 schedule features extracted from upcoming timetable events.
-  \item \textbf{Constrained Control Problem (Section~3.2)}: We formalize the hybrid action space (continuous power, discrete channel, simplex airtime split), unit-normalized reward terms, and the adaptive Lagrangian airtime utilization constraint.
-  \item \textbf{Architectural Dimensions (Table~4)}: Table~4 specifies the exact tensor shapes and layer dimensions for all projection matrices, graph-attention heads, and temporal Transformer layers.
-  \item \textbf{Algorithmic Workflow (Algorithm~1)}: Algorithm~1 provides the complete step-by-step training and inference procedure.
+  \item \textbf{System Model and Role Formalization (Section~\ref{sec:roles})}: We explicitly define the three operational entities: the per-AP SAC agent, the zone controller, and the venue controller, detailing their hierarchical relationships and interactions.
+  \item \textbf{Data Flow Timeline (Section~\ref{sec:roles})}: We specify the precise chronological sequence of information exchange and decision-making over each 5-minute control interval.
+  \item \textbf{Comprehensive Input Specification (Tables~\ref{tab:obs} and~\ref{tab:sched})}: Table~\ref{tab:obs} details every input feature, its source, update frequency, and tensor dimensions. Table~\ref{tab:sched} specifies the 8 schedule features extracted from upcoming timetable events.
+  \item \textbf{Constrained Control Problem (Section~\ref{sec:action})}: We formalize the hybrid action space (continuous power, discrete channel, simplex airtime split), unit-normalized reward terms, and the adaptive Lagrangian airtime utilization constraint.
+  \item \textbf{Architectural Dimensions (Table~\ref{tab:dims})}: Table~\ref{tab:dims} specifies the exact tensor shapes and layer dimensions for all projection matrices, graph-attention heads, and temporal Transformer layers.
+  \item \textbf{Algorithmic Workflow (Algorithm~\ref{alg:main})}: Algorithm~\ref{alg:main} provides the complete step-by-step training and inference procedure.
 \end{enumerate}
 
 \rev{R1.2 -- ``Some concepts, for instance `per-AP agents', do not appear described.''}
 
-\resp We have added a dedicated definition of the per-AP agent architecture in Section~3.1 and Section~3.4:
+\resp We have added a dedicated definition of the per-AP agent architecture in Section~\ref{sec:roles} and Section~\ref{sec:sac}:
 Each AP $i \in \{1,\dots,N\}$ is governed by an independent Soft Actor-Critic (SAC) agent consisting of:
 \begin{itemize}[leftmargin=1.2em,itemsep=0.1em]
   \item An actor network $\pi_i$ structured into a federated base (two shared hidden layers of 256 units) and a personalized head (128 hidden units followed by specialized output heads for transmit power, channel selection, and airtime budgeting).
-  \item Twin centralized-training/decentralized-execution critic networks $Q_i^1, Q_i^2$ with corresponding target networks $\bar{Q}_i^1, \bar{Q}_i^2$.
+  \item Twin critic networks $Q_i^1, Q_i^2$ (local to the AP) with corresponding target networks $\bar{Q}_i^1, \bar{Q}_i^2$.
   \item A private, local replay buffer $\mathcal{B}_i$ storing local transition tuples $(\mathbf{s}_i, \mathbf{a}_i, r_i, \mathbf{s}_i')$. Replay transitions and user association logs remain strictly on the AP (or its local zone controller).
 \end{itemize}
 At each 5-minute interval, the agent observes its local radio counters, QoS traffic mix, and upcoming schedule context, and outputs its AP's specific transmit power, channel assignment, and 802.11e EDCA airtime quotas.
 
 \rev{R1.3 -- ``Many of the parameters are ad-hoc, without a detailed description on their derivation (see for instance the numbers for the multi-dimensional reward function in Section~3.1).''}
 
-\resp We have clarified the physical rationale, normalization principles, and priority ordering of the reward function (Section~3.2, Eq.~1):
+\resp We have clarified the physical rationale, normalization principles, and priority ordering of the reward function (Section~\ref{sec:action}, Eq.~\eqref{eq:reward}):
 \begin{itemize}[leftmargin=1.2em,itemsep=0.1em]
   \item \textbf{Unit-Scale Normalization}: To prevent scale disparities from dominating policy gradients, each reward component is normalized to a unit range $[0, 1]$ or $[-1, 0]$ using realistic operational benchmarks: reference throughput $X_{\mathrm{ref}}=100$~Mbps, reference latency $\ell_{\mathrm{ref}}=100$~ms, and Jain's Fairness Index $r^{\mathrm{fair}} \in [0, 1]$.
   \item \textbf{Priority Hierarchy}: The weights $\alpha=0.40$ (throughput), $\beta=0.25$ (latency), $\gamma=0.20$ (fairness), $\delta=0.05$ (QoS violations), and $\delta_p=0.10$ (predictive shaping) sum to one. Throughput and latency receive the largest weights as primary user experience drivers. The direct QoS violation weight is intentionally modest ($0.05$) because packet delays and throughput drops already penalize the primary latency and throughput terms. The predictive shaping term ($\delta_p=0.10$) serves as an auxiliary training signal and is excluded during evaluation.
-  \item \textbf{Reward Sensitivity Analysis}: To rigorously evaluate whether our conclusions depend on these specific weights, we conducted an extensive sensitivity study across four diverse operator preference profiles: (1)~Default, (2)~Equal weights ($0.25$ each), (3)~Throughput-heavy ($0.55/0.15/0.20/0.10$), and (4)~Latency-heavy ($0.20/0.50/0.20/0.10$). As reported in Section~4.9 and Table~8, the relative ranking and superiority of STAG-FedSAC hold consistently across all weighting regimes.
+  \item \textbf{Reward Sensitivity Analysis}: To evaluate whether our conclusions depend on these specific weights, we conducted a sensitivity study across four diverse operator preference profiles: (1)~Default, (2)~Equal weights ($0.25$ each), (3)~Throughput-heavy ($0.55/0.15/0.20/0.10$), and (4)~Latency-heavy ($0.20/0.50/0.20/0.10$). As reported in Section~\ref{sec:exp-weights} and Table~\ref{tab:weights}, the ranking of the methods (SSF, then STAG-FedSAC (latent-embedding configuration), then FedDDPG) is the same in all four weighting profiles; each cell is a single training seed.
 \end{itemize}
 
 \rev{R1.4 -- ``Another aspect which is unclear is how the historical information is presented to the framework.''}
 
-\resp We have added an explicit description of the historical data pipeline in Section~3.1, Section~3.3, and Table~2:
+\resp We have added an explicit description of the historical data pipeline in Section~\ref{sec:roles}, Section~\ref{sec:stgcat}, and Table~\ref{tab:obs}:
 \begin{itemize}[leftmargin=1.2em,itemsep=0.1em]
   \item At each 5-minute interval $t$, each AP reports 5 scalar counters: normalized load $L_i^t$, throughput, mean latency, airtime utilization $u_i^t$, and active user count.
   \item The venue controller maintains a historical tensor $\mathbf{H}^t \in \mathbb{R}^{N \times T \times 5}$ spanning the previous $T=12$ intervals (the past 60 minutes), along with the inter-AP interference graph $\mathbf{A} \in \mathbb{R}^{N \times N}$ based on path loss.
-  \item ST-GCAT processes $\mathbf{H}^t$ via spatial Graph Attention (Eq.~2), followed by a temporal Transformer encoder to generate a spatial-temporal summary vector $\mathbf{U}_i \in \mathbb{R}^{\Delta \times d_h}$.
-  \item Multi-head cross-attention (Eq.~3) queries upcoming schedule features $\mathbf{S}^{t:t+\Delta} \in \mathbb{R}^{N \times \Delta \times 8}$ using $\mathbf{U}_i$ as queries and projected schedule features as keys and values, producing multi-step load forecasts up to 30 minutes ahead.
+  \item ST-GCAT processes $\mathbf{H}^t$ via spatial Graph Attention (Eq.~\eqref{eq:gat}), followed by a temporal Transformer encoder to generate a spatial-temporal summary vector $\mathbf{U}_i \in \mathbb{R}^{\Delta \times d_h}$.
+  \item Multi-head cross-attention (Eq.~\eqref{eq:pred}) queries upcoming schedule features $\mathbf{S}^{t:t+\Delta} \in \mathbb{R}^{N \times \Delta \times 8}$ using $\mathbf{U}_i$ as queries and projected schedule features as keys and values, producing multi-step load forecasts up to 30 minutes ahead.
 \end{itemize}
 
 \rev{R1.5 -- ``Why federation is actually required. The aspects of privacy involved are not completely clear in order to justify this architectural decision.''}
 
-\resp We have revised Section~3.1 (``What is federated, and why'') and Section~4.7 to explicitly articulate the operational and privacy necessity of federation:
+\resp We have revised Section~\ref{sec:roles} (``What is federated, and why'') and Section~\ref{sec:exp-fed} to explicitly articulate the operational and privacy necessity of federation:
 \begin{itemize}[leftmargin=1.2em,itemsep=0.1em]
-  \item \textbf{Multi-Operator Administrative Boundaries}: Large transit hubs (e.g., international airports) are partitioned into administrative zones operated by independent stakeholders (e.g., airport terminal authority, commercial airline VIP lounges, retail concessionaires). These entities are legally and commercially prohibited from sharing raw per-user data (MAC addresses, association histories, mobility patterns, traffic payloads).
-  \item \textbf{Data Minimization Architecture}: HierFed-KD enforces strict data minimization: user association records, local replay buffers, and critic networks remain strictly inside each AP. Only actor base layers are aggregated within local zones, while inter-zone coordination is achieved via soft policy outputs on a public reference set, completely avoiding wide-area model parameter sharing.
-  \item \textbf{Empirical Quantification (Table~7)}: We added a comprehensive federation comparison evaluating: (i)~isolated learning, (ii)~flat FedAvg, (iii)~zone FedAvg, (iv)~hierarchical weight averaging, (v)~HierFed-KD, and (vi)~centralized experience pooling. Results show that isolated learning performs poorly ($\mIsoReward$), centralized experience pooling fails due to policy mismatch ($\mCentralReward$), while HierFed-KD attains competitive performance while slashing wide-area communication by $\commRatioAFive\times$ relative to weight-based federation and $\commRatioFlat\times$ relative to flat FedAvg.
+  \item \textbf{Multi-Operator Administrative Boundaries}: Large transit hubs (e.g., international airports) are partitioned into administrative zones operated by independent stakeholders (e.g., airport terminal authority, commercial airline VIP lounges, retail concessionaires). These entities may be legally or commercially unable to share raw per-user data (MAC addresses, association histories, mobility patterns, traffic payloads).
+  \item \textbf{Data Minimisation Architecture}: HierFed-KD provides data minimisation (not a formal privacy guarantee): user association records, local replay buffers, and critic networks remain strictly inside each AP. Only actor base layers are aggregated within local zones, while inter-zone coordination is achieved via soft policy outputs on a public reference set, so that no model parameters are shared between zones.
+  \item \textbf{Empirical Quantification (Table~\ref{tab:fed})}: We added a comprehensive federation comparison evaluating: (i)~isolated learning, (ii)~flat FedAvg, (iii)~zone FedAvg, (iv)~hierarchical weight averaging, (v)~HierFed-KD, and (vi)~centralized experience pooling. Results show that isolated learning reaches $\mIsoReward$, centralized experience pooling reaches only $\mCentralReward$ (a possible reason is the mismatch between AP-specific policies and pooled transitions), while HierFed-KD ($\mFullReward$, comparable to the other federated variants) reduces wide-area communication by $\commRatioAFive\times$ relative to weight-based federation and $\commRatioFlat\times$ relative to flat FedAvg.
 \end{itemize}
 
 \rev{R1.6 -- ``The reviewer suggests the author to present a more clear and detailed description, avoiding the assumption that many aspects are clear in advance for the reader.''}
 
-\resp We have revised the entire manuscript to ensure pedagogical clarity, defining all mathematical notations where first introduced, incorporating Table~1 (Notation Table), Table~5 (Simulation Parameters), and Table~6 (Hyperparameter Specification), and presenting all experimental protocols self-contained within Section~4.
+\resp We have revised the entire manuscript to ensure pedagogical clarity, defining all mathematical notations where first introduced, incorporating Table~\ref{tab:notation} (Notation Table), Table~\ref{tab:sim} (Simulation Parameters), and Table~\ref{tab:hyper} (Hyperparameter Specification), and presenting all experimental protocols self-contained within Section~\ref{sec:exp}.
 
 \section*{3. Detailed Point-by-Point Reply to Reviewer 2}
 
@@ -129,43 +129,43 @@ At each 5-minute interval, the agent observes its local radio counters, QoS traf
 
 \resp We fully agree with the reviewer. In response, we have implemented an explicit MAC-layer contention model in the simulator and experimentally quantified its impact:
 \begin{itemize}[leftmargin=1.2em,itemsep=0.1em]
-  \item \textbf{Bianchi Saturation and Queuing Delay Implementation (Section~4.1)}: APs operating on the same channel within carrier-sense range ($\ge -82$~dBm) form collision domains. Medium time-sharing efficiency $\eta(m_i)$ is computed directly using Bianchi's fixed-point DCF model as a function of backlogged stations $m_i$ ($87\%$ for 1 station, $70\%$ for 10 stations, $50\%$ for 100 stations). Per-class latency is modeled via an M/G/1-type delay based on service time $s_i = (\text{A-MPDU time})/\eta(m_i)$ and class airtime load.
-  \item \textbf{Quantitative Impact Analysis (Section~4.8, Table~9)}: When evaluated in the absence of contention, latency drops artificially from $\mFullLat$~ms to $\mNoMacEvalFullLat$~ms (STAG-FedSAC) and from $\mSSFLat$~ms to $\mNoMacEvalSSFLat$~ms (SSF)---a distortion factor of $\LATFACTOR\times$ ($45\%$). This confirms that idealized capacity models substantially understate latency.
-  \item \textbf{Necessity of Contention-Aware Training}: Policies trained without contention and subsequently tested with contention degrade drastically ($\mNoMacFullReward$ vs.\ $\mFullReward$), proving that agents must learn contention-aware spatial reuse during training.
+  \item \textbf{Bianchi Saturation and Queuing Delay Implementation (Section~\ref{sec:sim})}: APs operating on the same channel within carrier-sense range ($\ge -82$~dBm) form collision domains. Medium time-sharing efficiency $\eta(m_i)$ is computed directly using Bianchi's fixed-point DCF model as a function of backlogged stations $m_i$ ($87\%$ for 1 station, $70\%$ for 10 stations, $50\%$ for 100 stations). Per-class latency is modeled via an M/G/1-type delay based on service time $s_i = (\text{A-MPDU time})/\eta(m_i)$ and class airtime load.
+  \item \textbf{Quantitative Impact Analysis (Section~\ref{sec:exp-robust}, Table~\ref{tab:robust})}: When evaluated in the absence of contention, latency drops artificially from $\mFullLat$~ms to $\mNoMacEvalFullLat$~ms (STAG-FedSAC, latent-embedding configuration) and from $\mSSFLat$~ms to $\mNoMacEvalSSFLat$~ms (SSF)---a distortion factor of $\LATFACTOR\times$ ($45\%$). This indicates that idealized capacity models understate latency in our simulator.
+  \item \textbf{Necessity of Contention-Aware Training}: Policies trained without contention and subsequently tested with contention are clearly worse ($\mNoMacFullReward$ vs.\ $\mFullReward$; two training seeds), which indicates that training with contention matters.
 \end{itemize}
 
 \rev{R2.2 -- Expenses of channel switching: ``The authors should account this penalty.''}
 
 \resp We have incorporated a realistic channel-switching penalty into the simulator and re-trained all agents under this cost:
 \begin{itemize}[leftmargin=1.2em,itemsep=0.1em]
-  \item \textbf{Switching Outage Model (Section~3.7)}: Each channel reassignment incurs an outage duration of $t_{\mathrm{sw}}=3$~s within the 300~s interval (covering Channel Switch Announcements and client re-association). Associated clients lose $t_{\mathrm{sw}}/300$ of their service airtime, and queued packets experience an additional $t_{\mathrm{sw}}/2$ delay penalty.
-  \item \textbf{Operational Stability Comparison (Table~5)}: Conventional continuous DRL baselines suffer catastrophic channel thrashing, switching $\mFedDDPGSwitch$ (FedDDPG) and $\mLSTMDRLSwitch$ (LSTM-DRL) APs per interval, causing severe performance collapse. In contrast, STAG-FedSAC's entropy regularization and proximal anchoring maintain strict switching stability ($0.15$ switches/AP/step).
-  \item \textbf{Sensitivity Evaluation}: Table~9 reports policy robustness across $t_{\mathrm{sw}} \in \{0, 3, 10\}$~s, showing that STAG-FedSAC maintains resilient performance across all outage regimes.
+  \item \textbf{Switching Outage Model (Section~\ref{sec:deploy})}: Each channel reassignment incurs an outage duration of $t_{\mathrm{sw}}=3$~s within the 300~s interval (covering Channel Switch Announcements and client re-association). Associated clients lose $t_{\mathrm{sw}}/300$ of their service airtime, and queued packets experience an additional $t_{\mathrm{sw}}/2$ delay penalty.
+  \item \textbf{Operational Stability Comparison (Table~\ref{tab:main})}: Conventional continuous DRL baselines suffer catastrophic channel thrashing, switching $\mFedDDPGSwitch$ (FedDDPG) and $\mLSTMDRLSwitch$ (LSTM-DRL) APs per interval, causing severe performance collapse. In contrast, STAG-FedSAC changes far fewer channels ($0.15$ switches/AP/step); we attribute this to SAC's entropy regularisation, the personal heads and the incumbent initialisation but did not isolate these factors.
+  \item \textbf{Sensitivity Evaluation}: Table~\ref{tab:robust} reports policy robustness across $t_{\mathrm{sw}} \in \{0, 3, 10\}$~s, where the latent-embedding configuration of STAG-FedSAC loses about $8\%$ of its reward between $0$ and $10$~s while FedDDPG loses about $38\%$.
 \end{itemize}
 
 \rev{R2.3 -- Bandwidth mapping to QoS queues: ``The authors need to bridge this architectural gap.''}
 
-\resp We have bridged this architectural gap in Section~3.7:
+\resp We have bridged this architectural gap in Section~\ref{sec:deploy}:
 \begin{itemize}[leftmargin=1.2em,itemsep=0.1em]
   \item \textbf{802.11e EDCA Mapping}: VoIP, video, and best-effort traffic streams are mapped to AC\_VO, AC\_VI, and AC\_BE access categories.
   \item \textbf{Airtime Quota Interpretation}: Because EDCA provides relative probabilistic prioritization rather than rigid bandwidth slicing, the policy's action vector $\mathbf{w}_i \in \Delta^3$ is interpreted as an \emph{airtime budget per access category}, enforced via the per-AC airtime quota scheduler available in enterprise AP drivers (e.g., mac80211 airtime weight framework).
   \item \textbf{Hardware-Aligned Quantization}: To match hardware driver registers, the airtime budget is quantized to integer multiples of $1/16$ with a minimum allocation of $1/16$ per active category. Unused airtime from satisfied or inactive categories is dynamically redistributed in a work-conserving manner.
 \end{itemize}
 
-\rev{R2.4 -- ``In Section~3.2.1, define the exact dimensions of the projection matrices and the attention vector $\mathbf{a}$ to complement the architectural data provided in Table~1.''}
+\rev{R2.4 -- ``In Section~3.2.1, define the exact dimensions of the projection matrices and the attention vector $\mathbf{a}$ to complement the architectural data provided in Table~1 [of the first submission].''}
 
-\resp Done. Table~4 now defines all learned projection dimensions in ST-GCAT ($F=5, D_s=8, d_h=128, K=4, d_k=32$). Section~3.3 and Eq.~2 explicitly formalize the spatial attention mechanism: projection matrix $\mathbf{W}^{\mathrm{sp}} \in \mathbb{R}^{128 \times 128}$ partitioned into $K=4$ blocks of $d_k=32$, with head-specific attention vectors $\mathbf{a}^k = [\mathbf{a}^k_l; \mathbf{a}^k_r] \in \mathbb{R}^{64}$.
+\resp Done. Table~\ref{tab:dims} now defines all learned projection dimensions in ST-GCAT ($F=5, D_s=8, d_h=128, K=4, d_k=32$). Section~\ref{sec:stgcat} and Eq.~\eqref{eq:gat} explicitly formalize the spatial attention mechanism: projection matrix $\mathbf{W}^{\mathrm{sp}} \in \mathbb{R}^{128 \times 128}$ partitioned into $K=4$ blocks of $d_k=32$, with head-specific attention vectors $\mathbf{a}^k = [\mathbf{a}^k_l; \mathbf{a}^k_r] \in \mathbb{R}^{64}$.
 
 \section*{4. Summary of Additional Experiments and New Material}
 
 The revised manuscript incorporates an extensive set of new empirical evaluations:
 \begin{enumerate}[leftmargin=1.2em,itemsep=0.1em]
-  \item \textbf{Main Comparative Evaluation (Table~5, Figure~2)}: Multi-seed evaluations comparing STAG-FedSAC against SSF, LLF, FedDDPG, LSTM-DRL, and systematic ablations.
-  \item \textbf{Statistical Confidence Analysis (Table~6)}: Paired bootstrap confidence intervals and exact permutation tests.
-  \item \textbf{Multi-Horizon Load Forecasting (Table~7, Figure~3)}: Multi-step RMSE, MAE, Surge-RMSE, and MAPE across all horizons.
-  \item \textbf{Federation and Communication Analysis (Table~8, Figure~4)}: Measured intra-zone and inter-zone byte-level traffic for all federation schemes.
-  \item \textbf{MAC Contention and Switching Outage Robustness (Table~9)}: Performance evaluation across contention regimes and switching penalties ($0$~s, $3$~s, $10$~s).
-  \item \textbf{Reward Weight Sensitivity (Table~10)}: Multi-objective evaluation across four operator priority weight profiles.
+  \item \textbf{Main Comparative Evaluation (Table~\ref{tab:main}, Figure~\ref{fig:conv})}: Multi-seed evaluations comparing STAG-FedSAC against SSF, LLF, FedDDPG, LSTM-DRL, and systematic ablations.
+  \item \textbf{Statistical Confidence Analysis (Table~\ref{tab:stats})}: Paired bootstrap confidence intervals and exact permutation tests.
+  \item \textbf{Multi-Horizon Load Forecasting (Table~\ref{tab:pred}, Figure~\ref{fig:pred})}: Multi-step RMSE, MAE, Surge-RMSE, and MAPE across all horizons.
+  \item \textbf{Federation and Communication Analysis (Table~\ref{tab:fed}, Figure~\ref{fig:fed})}: Measured intra-zone and inter-zone byte-level traffic for all federation schemes.
+  \item \textbf{MAC Contention and Switching Outage Robustness (Table~\ref{tab:robust})}: Performance evaluation across contention regimes and switching penalties ($0$~s, $3$~s, $10$~s).
+  \item \textbf{Reward Weight Sensitivity (Table~\ref{tab:weights})}: Multi-objective evaluation across four operator priority weight profiles.
 \end{enumerate}
 
 We thank the Editor and Reviewers once again for their constructive guidance, which has substantially improved the depth, rigor, and impact of our manuscript.
