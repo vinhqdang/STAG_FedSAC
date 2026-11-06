@@ -4,8 +4,8 @@ Forecaster & RMSE & MAE & RMSE ($h{=}1$) & Surge-RMSE & Normal-RMSE & MAPE (\%) 
 \midrule
 Persistence & 0.186{\tiny$\pm$0.001} & 0.130{\tiny$\pm$0.000} & 0.096{\tiny$\pm$0.000} & 0.266{\tiny$\pm$0.002} & 0.162{\tiny$\pm$0.001} & 27.8{\tiny$\pm$0.4} \\
 LSTM (temporal only) & 0.142{\tiny$\pm$0.000} & 0.107{\tiny$\pm$0.002} & 0.075{\tiny$\pm$0.001} & 0.213{\tiny$\pm$0.010} & 0.118{\tiny$\pm$0.004} & 24.4{\tiny$\pm$1.0} \\
-ST-GCAT, no schedule (A2) & 0.175{\tiny$\pm$0.003} & 0.135{\tiny$\pm$0.004} & 0.159{\tiny$\pm$0.004} & 0.243{\tiny$\pm$0.005} & 0.152{\tiny$\pm$0.005} & 30.2{\tiny$\pm$1.7} \\
-ST-GCAT, $\eta=0$ (A1) & 0.121{\tiny$\pm$0.000} & 0.091{\tiny$\pm$0.001} & 0.126{\tiny$\pm$0.003} & 0.163{\tiny$\pm$0.009} & 0.111{\tiny$\pm$0.002} & 20.4{\tiny$\pm$0.7} \\
-STAG-FedSAC & 0.127{\tiny$\pm$0.000} & 0.097{\tiny$\pm$0.001} & 0.132{\tiny$\pm$0.000} & 0.169{\tiny$\pm$0.006} & 0.116{\tiny$\pm$0.002} & 21.3{\tiny$\pm$0.6} \\
+ST-GCAT w/o schedule & 0.175{\tiny$\pm$0.003} & 0.135{\tiny$\pm$0.004} & 0.159{\tiny$\pm$0.004} & 0.243{\tiny$\pm$0.005} & 0.152{\tiny$\pm$0.005} & 30.2{\tiny$\pm$1.7} \\
+ST-GCAT (joint gradient, $\eta{=}0.1$) & 0.127{\tiny$\pm$0.000} & 0.097{\tiny$\pm$0.001} & 0.132{\tiny$\pm$0.000} & 0.169{\tiny$\pm$0.006} & 0.116{\tiny$\pm$0.002} & 21.3{\tiny$\pm$0.6} \\
+ST-GCAT (decoupled, $\eta{=}0$) & 0.121{\tiny$\pm$0.000} & 0.091{\tiny$\pm$0.001} & 0.126{\tiny$\pm$0.003} & 0.163{\tiny$\pm$0.009} & 0.111{\tiny$\pm$0.002} & 20.4{\tiny$\pm$0.7} \\
 \bottomrule
 \end{tabular}

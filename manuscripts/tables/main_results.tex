@@ -2,13 +2,13 @@
 \toprule
 Method & Seeds & Reward & Thrpt. (Mbps/user) & Lat. (ms) & JFI & QoS sat. & Mbps/W & Sw./AP/step \\
 \midrule
-SSF & 3 & 0.181{\tiny$\pm$0.001} & 1.31{\tiny$\pm$0.00} & 124.6{\tiny$\pm$2.2} & \textbf{0.985{\tiny$\pm$0.001}} & 0.682{\tiny$\pm$0.002} & 7.40{\tiny$\pm$0.03} & \textbf{0.075{\tiny$\pm$0.000}} \\
-LLF & 3 & 0.156{\tiny$\pm$0.001} & 1.22{\tiny$\pm$0.01} & 145.0{\tiny$\pm$2.2} & 0.967{\tiny$\pm$0.002} & 0.638{\tiny$\pm$0.002} & 6.85{\tiny$\pm$0.04} & \textbf{0.075{\tiny$\pm$0.000}} \\
+SSF (Static) & 3 & 0.181{\tiny$\pm$0.001} & 1.31{\tiny$\pm$0.00} & 124.6{\tiny$\pm$2.2} & \textbf{0.985{\tiny$\pm$0.001}} & 0.682{\tiny$\pm$0.002} & 7.40{\tiny$\pm$0.03} & \textbf{0.075{\tiny$\pm$0.000}} \\
+LLF (Reactive) & 3 & 0.156{\tiny$\pm$0.001} & 1.22{\tiny$\pm$0.01} & 145.0{\tiny$\pm$2.2} & 0.967{\tiny$\pm$0.002} & 0.638{\tiny$\pm$0.002} & 6.85{\tiny$\pm$0.04} & \textbf{0.075{\tiny$\pm$0.000}} \\
 LSTM-DRL & 3 & 0.108{\tiny$\pm$0.004} & 1.11{\tiny$\pm$0.01} & 198.9{\tiny$\pm$8.0} & 0.928{\tiny$\pm$0.007} & 0.577{\tiny$\pm$0.021} & 6.07{\tiny$\pm$0.07} & 0.668{\tiny$\pm$0.011} \\
 FedDDPG & 3 & 0.116{\tiny$\pm$0.004} & 1.16{\tiny$\pm$0.01} & 184.8{\tiny$\pm$7.2} & 0.943{\tiny$\pm$0.005} & 0.602{\tiny$\pm$0.010} & 6.40{\tiny$\pm$0.08} & 0.752{\tiny$\pm$0.031} \\
-A1: no joint gradient & 3 & 0.176{\tiny$\pm$0.009} & 1.30{\tiny$\pm$0.03} & 118.4{\tiny$\pm$9.8} & 0.979{\tiny$\pm$0.008} & 0.679{\tiny$\pm$0.017} & 7.34{\tiny$\pm$0.16} & 0.128{\tiny$\pm$0.011} \\
-A2: no schedule & 3 & 0.128{\tiny$\pm$0.010} & 1.16{\tiny$\pm$0.03} & 183.9{\tiny$\pm$14.3} & 0.937{\tiny$\pm$0.007} & 0.584{\tiny$\pm$0.019} & 6.45{\tiny$\pm$0.18} & 0.214{\tiny$\pm$0.013} \\
-A3: no embedding & 3 & \textbf{0.182{\tiny$\pm$0.006}} & \textbf{1.32{\tiny$\pm$0.02}} & \textbf{109.9{\tiny$\pm$7.0}} & 0.985{\tiny$\pm$0.005} & \textbf{0.689{\tiny$\pm$0.014}} & \textbf{7.47{\tiny$\pm$0.13}} & 0.153{\tiny$\pm$0.014} \\
-STAG-FedSAC & 3 & 0.141{\tiny$\pm$0.008} & 1.19{\tiny$\pm$0.02} & 170.6{\tiny$\pm$8.6} & 0.952{\tiny$\pm$0.007} & 0.614{\tiny$\pm$0.017} & 6.65{\tiny$\pm$0.14} & 0.165{\tiny$\pm$0.009} \\
+STAG-FedSAC w/o Schedule & 3 & 0.128{\tiny$\pm$0.010} & 1.16{\tiny$\pm$0.03} & 183.9{\tiny$\pm$14.3} & 0.937{\tiny$\pm$0.007} & 0.584{\tiny$\pm$0.019} & 6.45{\tiny$\pm$0.18} & 0.214{\tiny$\pm$0.013} \\
+STAG-FedSAC (Latent Emb., $\eta{=}0.1$) & 3 & 0.141{\tiny$\pm$0.008} & 1.19{\tiny$\pm$0.02} & 170.6{\tiny$\pm$8.6} & 0.952{\tiny$\pm$0.007} & 0.614{\tiny$\pm$0.017} & 6.65{\tiny$\pm$0.14} & 0.165{\tiny$\pm$0.009} \\
+STAG-FedSAC (Latent Emb., $\eta{=}0$) & 3 & 0.176{\tiny$\pm$0.009} & 1.30{\tiny$\pm$0.03} & 118.4{\tiny$\pm$9.8} & 0.979{\tiny$\pm$0.008} & 0.679{\tiny$\pm$0.017} & 7.34{\tiny$\pm$0.16} & 0.128{\tiny$\pm$0.011} \\
+STAG-FedSAC (Proposed) & 3 & \textbf{0.182{\tiny$\pm$0.006}} & \textbf{1.32{\tiny$\pm$0.02}} & \textbf{109.9{\tiny$\pm$7.0}} & 0.985{\tiny$\pm$0.005} & \textbf{0.689{\tiny$\pm$0.014}} & \textbf{7.47{\tiny$\pm$0.13}} & 0.153{\tiny$\pm$0.014} \\
 \bottomrule
 \end{tabular}

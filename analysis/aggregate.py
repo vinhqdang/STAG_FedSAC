@@ -23,12 +23,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 NAMES = {
-    "ssf": "SSF", "llf": "LLF", "persist": "Persistence", "lstm_drl": "LSTM-DRL", "fedddpg": "FedDDPG",
-    "full": "STAG-FedSAC", "a1_nojoint": "A1: no joint gradient", "a2_nosched": "A2: no schedule",
-    "a3_noemb": "A3: no embedding", "a4_zone": "Zone FedAvg only", "a5_hieravg": "Hier. FedAvg+FedProx (weights)",
+    "ssf": "SSF (Static)", "llf": "LLF (Reactive)", "persist": "Persistence", "lstm_drl": "LSTM-DRL", "fedddpg": "FedDDPG",
+    "full": "STAG-FedSAC (Latent Emb., $\\eta{=}0.1$)", "a1_nojoint": "STAG-FedSAC (Latent Emb., $\\eta{=}0$)", "a2_nosched": "STAG-FedSAC w/o Schedule",
+    "a3_noemb": "STAG-FedSAC (Proposed)", "a4_zone": "Zone FedAvg only", "a5_hieravg": "Hier. FedAvg+FedProx (weights)",
     "iso": "Isolated (no federation)", "flat": "Flat FedAvg", "central": "Pooled experience (centralised)",
 }
-MAIN_ORDER = ["ssf", "llf", "lstm_drl", "fedddpg", "a1_nojoint", "a2_nosched", "a3_noemb", "full"]
+MAIN_ORDER = ["ssf", "llf", "lstm_drl", "fedddpg", "a2_nosched", "full", "a1_nojoint", "a3_noemb"]
 FED_ORDER = ["iso", "flat", "a4_zone", "a5_hieravg", "full", "central"]
 METRICS = [("reward", "Reward", 3), ("tput", "Thrpt. (Mbps/user)", 2), ("lat", "Lat. (ms)", 1),
            ("jfi", "JFI", 3), ("qos", "QoS sat.", 3), ("eeff", "Mbps/W", 2), ("switch", "Sw./AP/step", 3)]
@@ -141,13 +141,14 @@ def main() -> None:
     # ---- Statistics: full vs each other method ---------------------------------------
     stats_rows = []
     summary["tests"] = {}
-    if "full" in main_runs:
-        others = [m for m in MAIN_ORDER if m != "full" and m in main_runs]
+    comp_ref = "a3_noemb" if "a3_noemb" in main_runs else "full"
+    if comp_ref in main_runs:
+        others = [m for m in MAIN_ORDER if m != comp_ref and m in main_runs]
         n_cmp = max(1, len(others))
         for m in others:
             row = {"method": m}
             for key in ("reward", "lat", "jfi", "qos"):
-                d, common = paired(main_runs["full"], main_runs[m], key)
+                d, common = paired(main_runs[comp_ref], main_runs[m], key)
                 if len(d) >= 2:
                     p = signflip_p(d)
                     lo, hi = boot_ci(d)
@@ -164,11 +165,18 @@ def main() -> None:
     # ---- Table: prediction quality -----------------------------------------------------
     pm = [("rmse", "RMSE", 3), ("mae", "MAE", 3), ("rmse_h1", "RMSE ($h{=}1$)", 3), ("surge_rmse", "Surge-RMSE", 3),
           ("normal_rmse", "Normal-RMSE", 3), ("mape", "MAPE (\\%)", 1)]
-    pred_methods = ["persist", "lstm_drl", "a2_nosched", "a1_nojoint", "full"]
+    pred_methods = ["persist", "lstm_drl", "a2_nosched", "full", "a1_nojoint"]
+    pred_names = {
+        "persist": "Persistence",
+        "lstm_drl": "LSTM (temporal only)",
+        "a2_nosched": "ST-GCAT w/o schedule",
+        "full": "ST-GCAT (joint gradient, $\\eta{=}0.1$)",
+        "a1_nojoint": "ST-GCAT (decoupled, $\\eta{=}0$)"
+    }
     pl = []
     for m in pred_methods:
         if m in main_runs and main_runs[m]:
-            pl.append(f"{ {"lstm_drl": "LSTM (temporal only)", "a2_nosched": "ST-GCAT, no schedule (A2)", "a1_nojoint": "ST-GCAT, $\\eta=0$ (A1)"}.get(m, NAMES[m]) } & " + " & ".join(fmt(seed_values(main_runs[m], k).values(), d) for k, _, d in pm) + " \\\\")
+            pl.append(f"{ pred_names.get(m, NAMES[m]) } & " + " & ".join(fmt(seed_values(main_runs[m], k).values(), d) for k, _, d in pm) + " \\\\")
     write(os.path.join(args.out_tables, "prediction.tex"),
           "\\begin{tabular}{l" + "c" * len(pm) + "}\n\\toprule\nForecaster & " + " & ".join(n for _, n, _ in pm) +
           " \\\\\n\\midrule\n" + "\n".join(pl) + "\n\\bottomrule\n\\end{tabular}\n")
@@ -178,6 +186,14 @@ def main() -> None:
     fm = [("reward", "Reward", 3), ("lat", "Lat. (ms)", 1), ("jfi", "JFI", 3), ("qos", "QoS sat.", 3)]
     fl = []
     comm_summary = {}
+    fed_names = {
+        "iso": "Isolated (no federation)",
+        "flat": "Flat FedAvg",
+        "a4_zone": "Zone FedAvg only",
+        "a5_hieravg": "Hier. FedAvg+FedProx (weights)",
+        "full": "HierFed-KD (Proposed distillation)",
+        "central": "Pooled experience (centralised)"
+    }
     for m in FED_ORDER:
         if not fed_runs.get(m):
             continue
@@ -185,7 +201,7 @@ def main() -> None:
         wan = np.mean([c["wan_total"] for c in comm]) / 1e6 if comm else 0.0
         intra = np.mean([c["intra_zone"] for c in comm]) / 1e6 if comm else 0.0
         comm_summary[m] = dict(wan_MB=float(wan), intra_MB=float(intra))
-        fl.append(f"{NAMES[m]} & {len(fed_runs[m])} & " + " & ".join(fmt(seed_values(fed_runs[m], k).values(), d) for k, _, d in fm)
+        fl.append(f"{fed_names.get(m, NAMES[m])} & {len(fed_runs[m])} & " + " & ".join(fmt(seed_values(fed_runs[m], k).values(), d) for k, _, d in fm)
                   + f" & {intra:.1f} & {wan:.1f} \\\\")
     write(os.path.join(args.out_tables, "federation.tex"),
           "\\begin{tabular}{llcccccc}\n\\toprule\nScheme & Seeds & Reward & Lat. (ms) & JFI & QoS sat. & Intra-zone (MB) & Inter-zone (MB) \\\\\n\\midrule\n"
@@ -245,10 +261,10 @@ def main() -> None:
     os.makedirs(args.out_figs, exist_ok=True)
     plt.rcParams.update({"font.family": "serif", "font.size": 10, "savefig.dpi": 300, "savefig.bbox": "tight"})
     col = {"ssf": "#9E9E9E", "llf": "#78909C", "lstm_drl": "#546E7A", "fedddpg": "#0277BD", "a1_nojoint": "#F57C00",
-           "a2_nosched": "#E53935", "a3_noemb": "#8E24AA", "full": "#2E7D32"}
+           "a2_nosched": "#E53935", "a3_noemb": "#8E24AA", "full": "#8E24AA", "a3_noemb": "#2E7D32"}
     # convergence (evaluation reward on 5 held-out episodes, mean +- std over seeds)
     fig, ax = plt.subplots(figsize=(6.4, 3.8))
-    for m in ["lstm_drl", "fedddpg", "a1_nojoint", "full"]:
+    for m in ["lstm_drl", "fedddpg", "full", "a1_nojoint", "a3_noemb"]:
         rs = main_runs.get(m, {})
         curves = [(r["history"]["eval_episode"], r["history"]["eval_reward"]) for r in rs.values() if "eval_reward" in r["history"]]
         if not curves:
@@ -256,7 +272,7 @@ def main() -> None:
         n = min(len(c[0]) for c in curves)
         x = np.array(curves[0][0][:n])
         y = np.array([c[1][:n] for c in curves])
-        ax.plot(x, y.mean(0), color=col[m], label=NAMES[m], lw=1.8)
+        ax.plot(x, y.mean(0), color=col[m], label=NAMES[m], lw=2.2 if m == "a3_noemb" else 1.5)
         ax.fill_between(x, y.mean(0) - y.std(0), y.mean(0) + y.std(0), color=col[m], alpha=0.15)
     for m, ls in (("ssf", ":"), ("llf", "--")):
         if main_runs.get(m):
@@ -321,6 +337,16 @@ def main() -> None:
                         d = 1 if k in ("lat", "mape") else (2 if k in ("tput", "eeff") else 3)
                         mac.append("\\newcommand{\\m%s%s%s%s}{%.*f}" % (tname, cname, MN[m], kn, d, v.mean()))
                         mac.append("\\newcommand{\\s%s%s%s%s}{%.*f}" % (tname, cname, MN[m], kn, d, (v.std(ddof=1) if len(v) > 1 else 0)))
+    # Add proposed aliases (from a3_noemb)
+    if "a3_noemb" in main_runs:
+        for k, kn in KN.items():
+            v = np.array(list(seed_values(main_runs["a3_noemb"], k).values()), dtype=float)
+            v = v[~np.isnan(v)]
+            if len(v):
+                d = 1 if k in ("lat", "mape") else (2 if k in ("tput", "eeff") else 3)
+                mac.append("\\newcommand{\\mProp%s}{%.*f}" % (kn, d, v.mean()))
+                mac.append("\\newcommand{\\sProp%s}{%.*f}" % (kn, d, (v.std(ddof=1) if len(v) > 1 else 0)))
+
     for m, row in summary.get("tests", {}).items():
         for k, r in row.items():
             if k == "method":
